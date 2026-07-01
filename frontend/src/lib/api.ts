@@ -6,7 +6,7 @@
  * Falls back to localhost for local dev.
  */
 
-const API_URL = (import.meta.env.VITE_API_URL || VITE_API_URL=https://sbt-app-repo-connected.onrender.com).replace(/\/$/, "");
+const API_URL = (import.meta.env.VITE_API_URL || "https://sbt-app-repo-connected.onrender.com").replace(/\/$/, "");
 const TOKEN_KEY = "sbt_token";
 
 let token: string | null =
