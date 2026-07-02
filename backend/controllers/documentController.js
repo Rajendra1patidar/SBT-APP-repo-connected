@@ -48,6 +48,8 @@ exports.create = (type) => async (req, res, next) => {
       notes: v.notes,
       total: v.total || 0,
       status: v.status || DEFAULT_STATUS[type],
+      freightCost: v.freightCost || 0,
+      labourCost: v.labourCost || 0,
       route: v.route,
       fromDate: v.fromDate,
       toDate: v.toDate,

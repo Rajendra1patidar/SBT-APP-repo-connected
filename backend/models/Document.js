@@ -20,6 +20,9 @@ const documentSchema = new mongoose.Schema(
     notes: { type: String },
     total: { type: Number, default: 0 },
     status: { type: String, default: "Draft" },
+    // invoice-specific extra charges
+    freightCost: { type: Number, default: 0 },
+    labourCost: { type: Number, default: 0 },
     // challan-specific fields (route sheet)
     route: { type: String },
     fromDate: { type: String },
