@@ -165,6 +165,68 @@ function FieldModal({ title, fields, initial, onClose, onSave, danger }: any) {
   );
 }
 
+/* ---- CustomerSearchSelect ---- */
+
+function CustomerSearchSelect({ customers, value, onChange }: { customers: any[]; value: string; onChange: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const selected = customers.find((c: any) => c.id === value);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = query.trim()
+    ? customers.filter((c: any) =>
+        c.name.toLowerCase().includes(query.trim().toLowerCase()) ||
+        (c.phone || "").toLowerCase().includes(query.trim().toLowerCase()) ||
+        (c.location || "").toLowerCase().includes(query.trim().toLowerCase())
+      )
+    : customers;
+
+  return (
+    <div ref={wrapRef} className="relative w-full">
+      <button type="button" onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-left bg-white">
+        <span className="truncate">{selected ? selected.name : "Select customer..."}</span>
+        <ChevronDown size={14} className="text-slate-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-10 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg max-h-56 overflow-y-auto">
+          <div className="sticky top-0 bg-white p-2 border-b border-slate-100">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search customers..."
+                className="w-full rounded-lg border border-slate-200 py-1.5 pl-7 pr-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            </div>
+          </div>
+          {filtered.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-slate-400">No customers match.</p>
+          ) : (
+            filtered.map((c: any) => (
+              <button key={c.id} type="button" onClick={() => { onChange(c.id); setQuery(""); setOpen(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${c.id === value ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700"}`}>
+                {c.name}
+                {(c.phone || c.location) && (
+                  <span className="block text-xs text-slate-400">
+                    {[c.phone, c.location].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---- ItemSearchSelect ---- */
 
 function ItemSearchSelect({ items, value, onChange }: { items: any[]; value: string; onChange: (id: string) => void }) {
@@ -256,9 +318,7 @@ function DocumentModal({ type, customers, items, onClose, onSave }: any) {
           <div className="space-y-4">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-500">Customer *</label>
-              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                {customers.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <CustomerSearchSelect customers={customers} value={customerId} onChange={setCustomerId} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
