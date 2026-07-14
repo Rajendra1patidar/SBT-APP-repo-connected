@@ -5,7 +5,7 @@ import {
   Bell, LifeBuoy, Plus, Trash2, Phone, ChevronDown, Sparkles, RotateCcw,
   Send, Check, CheckCircle2, AlertCircle, ArrowRight, MessageSquare,
   Search, MapPin, PackageCheck, ClipboardList, ChevronUp, AlertTriangle,
-  ShoppingCart, Loader2, Pencil, Printer, HardHat
+  ShoppingCart, Loader2, Pencil, Printer, HardHat, Award
 } from "lucide-react";
 import { api } from "../lib/api";
 
@@ -57,6 +57,7 @@ const NAV = [
   { id: "expenses",   label: "Expenses",             icon: Wallet },
   { id: "todo",       label: "To-Do Tracking",       icon: ClipboardList },
   { id: "labour",     label: "Labour Tracking",      icon: HardHat },
+  { id: "contractors", label: "Contractor Scorecard", icon: Award },
   { id: "reports",       label: "Reports",              icon: BarChart3 },
   { id: "sharereport",   label: "Share Report",         icon: Send },
   { id: "billing",       label: "Advanced Billing",     icon: Globe2 },
@@ -175,6 +176,11 @@ function DocumentModal({ type, customers, items, estimates, onClose, onSave }: a
   const [freightCost, setFreightCost] = useState("");
   const [labourCost, setLabourCost] = useState("");
   const [includePreviousDue, setIncludePreviousDue] = useState(true);
+  const [contractorName, setContractorName] = useState("");
+  const [destination, setDestination] = useState("");
+
+  const knownContractors = Array.from(new Set((estimates || []).map((e: any) => e.contractorName).filter(Boolean))) as string[];
+  const knownDestinations = Array.from(new Set((estimates || []).map((e: any) => e.destination).filter(Boolean))) as string[];
 
   const addLine = () => setLines((l) => [...l, { itemId: items[0]?.id || "", qty: 1, rate: items[0]?.price || 0 }]);
   const updateLine = (i: number, patch: any) => setLines((l) => l.map((ln, idx) => idx === i ? { ...ln, ...patch } : ln));
@@ -254,6 +260,20 @@ function DocumentModal({ type, customers, items, estimates, onClose, onSave }: a
                 })}
               </div>
             </div>
+            {type === "estimate" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-500">Contractor name</label>
+                  <input list="contractor-names" value={contractorName} onChange={(e) => setContractorName(e.target.value)} placeholder="Optional" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                  <datalist id="contractor-names">{knownContractors.map((n) => <option key={n} value={n} />)}</datalist>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-500">Destination</label>
+                  <input list="destination-names" value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="Place / area" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                  <datalist id="destination-names">{knownDestinations.map((n) => <option key={n} value={n} />)}</datalist>
+                </div>
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-500">Notes</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
@@ -306,6 +326,7 @@ function DocumentModal({ type, customers, items, estimates, onClose, onSave }: a
             customerId, date, dueDate, lines, notes, total,
             freightCost: Number(freightCost || 0), labourCost: Number(labourCost || 0), previousDue,
             rolledEstimateIds: includePreviousDue ? previousDueEstimates.map((e: any) => e.id) : [],
+            contractorName, destination,
           })}
             className="flex-1 rounded-full bg-slate-900 py-3 text-sm font-semibold text-white disabled:opacity-40">Save {type}</button>
         </div>
@@ -1139,6 +1160,64 @@ function ExpensesView({ expenses, currency, openModal, removeExpense }: any) {
 
 /* ---- To-Do Tracking (inventory focus, replaces Time Tracking) ---- */
 
+function ContractorScorecardView({ estimates, items, currency }: any) {
+  const [openContractor, setOpenContractor] = useState<string | null>(null);
+
+  const byContractor: Record<string, { total: number; count: number; itemMap: Record<string, { name: string; qty: number; amount: number }> }> = {};
+  (estimates || []).forEach((est: any) => {
+    const name = (est.contractorName || "").trim();
+    if (!name) return;
+    if (!byContractor[name]) byContractor[name] = { total: 0, count: 0, itemMap: {} };
+    byContractor[name].total += Number(est.total || 0);
+    byContractor[name].count += 1;
+    (est.lines || []).forEach((ln: any) => {
+      const it = items.find((i: any) => i.id === ln.itemId);
+      const itemName = it?.name || "Unknown item";
+      const qty = Number(ln.qty || 0);
+      const amount = qty * Number(ln.rate ?? it?.price ?? 0);
+      if (!byContractor[name].itemMap[itemName]) byContractor[name].itemMap[itemName] = { name: itemName, qty: 0, amount: 0 };
+      byContractor[name].itemMap[itemName].qty += qty;
+      byContractor[name].itemMap[itemName].amount += amount;
+    });
+  });
+
+  const contractors = Object.keys(byContractor).sort((a, b) => byContractor[b].total - byContractor[a].total);
+
+  return (
+    <div className="space-y-3 px-5 pb-28">
+      {contractors.length === 0 ? (
+        <Card><p className="text-sm text-slate-400">No estimates have a contractor name set yet. Add one when creating an estimate to see them here.</p></Card>
+      ) : contractors.map((name) => {
+        const c = byContractor[name];
+        const itemRows = Object.values(c.itemMap).sort((a, b) => b.amount - a.amount);
+        const isOpen = openContractor === name;
+        return (
+          <Card key={name}>
+            <button className="flex w-full items-center justify-between text-left" onClick={() => setOpenContractor(isOpen ? null : name)}>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{name}</p>
+                <p className="mt-0.5 text-xs text-slate-400">{c.count} estimate{c.count !== 1 ? "s" : ""} · {fmtMoney(c.total, currency)}</p>
+              </div>
+              {isOpen ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+            </button>
+            {isOpen && (
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                {itemRows.map((r) => (
+                  <div key={r.name} className="flex items-center justify-between py-1.5 text-sm">
+                    <span className="text-slate-600">{r.name}</span>
+                    <span className="text-slate-500">{r.qty} units</span>
+                    <span className="font-semibold text-slate-900">{fmtMoney(r.amount, currency)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 const LABOUR_RATES = { cement: 4, saria: 20, balu: 5 };
 
 function LabourTrackingView({ sessions, knownWorkers, onSave, onRemove, currency }: any) {
@@ -1438,6 +1517,103 @@ function ToDoTrackingView({ items, settings }: any) {
 
 /* ---- Reports ---- */
 
+let gmapsPromise: Promise<any> | null = null;
+function loadGoogleMaps(apiKey: string): Promise<any> {
+  if ((window as any).google?.maps) return Promise.resolve((window as any).google);
+  if (gmapsPromise) return gmapsPromise;
+  gmapsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.async = true;
+    script.onload = () => resolve((window as any).google);
+    script.onerror = () => reject(new Error("Failed to load Google Maps"));
+    document.head.appendChild(script);
+  });
+  return gmapsPromise;
+}
+
+function EstimatesMapCard({ invoices, currency }: any) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [mapError, setMapError] = useState("");
+  const apiKey = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+
+  const byDestination: Record<string, { total: number; count: number }> = {};
+  invoices.forEach((inv: any) => {
+    const dest = (inv.destination || "").trim();
+    if (!dest) return;
+    if (!byDestination[dest]) byDestination[dest] = { total: 0, count: 0 };
+    byDestination[dest].total += Number(inv.total || 0);
+    byDestination[dest].count += 1;
+  });
+  const destinations = Object.keys(byDestination);
+  const destinationsKey = destinations.join("|");
+
+  useEffect(() => {
+    if (!apiKey || destinations.length === 0 || !mapRef.current) return;
+    let cancelled = false;
+    loadGoogleMaps(apiKey).then((google) => {
+      if (cancelled || !mapRef.current) return;
+      const map = new google.maps.Map(mapRef.current, { zoom: 5, center: { lat: 22.5, lng: 78.9 } });
+      const geocoder = new google.maps.Geocoder();
+      const bounds = new google.maps.LatLngBounds();
+
+      const placeMarker = (dest: string, lat: number, lng: number) => {
+        const pos = { lat, lng };
+        const marker = new google.maps.Marker({ position: pos, map, title: dest });
+        const info = new google.maps.InfoWindow({
+          content: `<div style="font-size:13px;"><b>${dest}</b><br/>${byDestination[dest].count} estimate${byDestination[dest].count !== 1 ? "s" : ""}<br/><b>${fmtMoney(byDestination[dest].total, currency)}</b></div>`,
+        });
+        marker.addListener("click", () => info.open(map, marker));
+        bounds.extend(pos);
+        if (!bounds.isEmpty()) map.fitBounds(bounds);
+      };
+
+      destinations.forEach((dest) => {
+        const cacheKey = `sbt_geocode:${dest}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const { lat, lng } = JSON.parse(cached);
+          placeMarker(dest, lat, lng);
+        } else {
+          geocoder.geocode({ address: dest }, (results: any, geoStatus: string) => {
+            if (cancelled) return;
+            if (geoStatus === "OK" && results[0]) {
+              const loc = results[0].geometry.location;
+              const lat = loc.lat(); const lng = loc.lng();
+              localStorage.setItem(cacheKey, JSON.stringify({ lat, lng }));
+              placeMarker(dest, lat, lng);
+            }
+          });
+        }
+      });
+    }).catch(() => setMapError("Couldn't load Google Maps. Check your API key."));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKey, destinationsKey]);
+
+  if (!apiKey) {
+    return (
+      <Card>
+        <h3 className="mb-1 text-base font-bold text-slate-900">Estimates by place</h3>
+        <p className="text-xs text-slate-400">Add a Google Maps API key as <code className="rounded bg-slate-100 px-1">VITE_GOOGLE_MAPS_API_KEY</code> in your frontend's environment to enable this map.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <h3 className="mb-1 text-base font-bold text-slate-900">Estimates by place</h3>
+      {destinations.length === 0 ? (
+        <p className="text-sm text-slate-400">No estimates in this range have a destination set yet.</p>
+      ) : mapError ? (
+        <p className="text-sm text-rose-500">{mapError}</p>
+      ) : (
+        <div ref={mapRef} style={{ width: "100%", height: 260, borderRadius: 12 }} className="mt-2 bg-slate-100" />
+      )}
+    </Card>
+  );
+}
+
 function ReportsView({ data, currency, settings }: any) {
   const { invoices, payments, expenses, customers, labourSessions } = data;
   const [nameQuery, setNameQuery] = useState("");
@@ -1523,6 +1699,7 @@ function ReportsView({ data, currency, settings }: any) {
         <p className="mt-2 text-xs text-slate-400">Prints estimates, payments received, and expenses between the two dates.</p>
         {rangeLabourTotal > 0 && <p className="mt-1 text-xs font-semibold text-amber-600">Labour cost in this range: {fmtMoney(rangeLabourTotal, currency)} ({rangeLabour.length} session{rangeLabour.length !== 1 ? "s" : ""})</p>}
       </Card>
+      <EstimatesMapCard invoices={invoices.filter((i: any) => i.date >= fromDate && i.date <= toDate)} currency={currency} />
       <div className="grid grid-cols-2 gap-3">
         {stats.map((s) => (<Card key={s.label}><p className="text-xs font-semibold text-slate-400">{s.label}</p><p className={`mt-1 text-xl font-bold ${s.color}`}>{fmtMoney(s.value, currency)}</p></Card>))}
       </div>
@@ -2107,6 +2284,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
         payload.labourCost = v.labourCost || 0;
         payload.previousDue = v.previousDue || 0;
         payload.rolledEstimateIds = v.rolledEstimateIds || [];
+        payload.contractorName = v.contractorName || "";
+        payload.destination = v.destination || "";
       }
       const { doc, lowStock } = await api.documents(type as any).create(payload);
       docSetter(type)((l: any[]) => [doc, ...l]);
@@ -2298,6 +2477,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       case "expenses":  return <ExpensesView expenses={expenses} currency={settings.currency} openModal={openModal} removeExpense={removeExpense} />;
       case "todo":      return <ToDoTrackingView items={items} settings={settings} />;
       case "labour":    return <LabourTrackingView sessions={labourSessions} knownWorkers={labourWorkers} onSave={saveLabourSession} onRemove={removeLabourSession} currency={settings.currency} />;
+      case "contractors": return <ContractorScorecardView estimates={estimates} items={items} currency={settings.currency} />;
       case "reports":      return <ReportsView data={data} currency={settings.currency} settings={settings} />;
       case "sharereport":  return <ShareReportView invoices={estimates} items={items} customers={customers} currency={settings.currency} settings={settings} />;
       case "billing":      return <AdvancedBillingView autoReminder={autoReminder} setAutoReminder={setAutoReminder} overdueCount={overdueCount} settings={settings} />;

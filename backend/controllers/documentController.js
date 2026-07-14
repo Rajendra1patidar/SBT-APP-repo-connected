@@ -51,6 +51,8 @@ exports.create = (type) => async (req, res, next) => {
       freightCost: v.freightCost || 0,
       labourCost: v.labourCost || 0,
       previousDue: v.previousDue || 0,
+      contractorName: v.contractorName || "",
+      destination: v.destination || "",
       route: v.route,
       fromDate: v.fromDate,
       toDate: v.toDate,

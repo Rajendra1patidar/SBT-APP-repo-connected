@@ -70,7 +70,6 @@ app.use("/api/labour-sessions", protect, labourSessionRoutes);
 
 app.get("/", (req, res) => res.send("SBT backend API is running."));
 
-
 app.use(notFound);
 app.use(errorHandler);
 

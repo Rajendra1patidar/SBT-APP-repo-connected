@@ -25,6 +25,8 @@ const documentSchema = new mongoose.Schema(
     freightCost: { type: Number, default: 0 },
     labourCost: { type: Number, default: 0 },
     previousDue: { type: Number, default: 0 },
+    contractorName: { type: String },
+    destination: { type: String },
     // challan-specific fields (route sheet)
     route: { type: String },
     fromDate: { type: String },
