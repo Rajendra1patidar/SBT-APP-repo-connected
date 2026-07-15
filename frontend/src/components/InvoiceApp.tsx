@@ -19,6 +19,12 @@ const fmtDate = (d?: string) =>
 const WHATSAPP_GREEN = "#25D366";
 const LOW_STOCK_DEFAULT = 5;
 
+interface InvoiceLine {
+  itemId: string;
+  qty: number;
+  rate: number;
+}
+
 function waLink(phone: string, message: string) {
   const clean = (phone || "").replace(/[^\d+]/g, "").replace(/^\+/, "");
   return `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
@@ -243,7 +249,7 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
   const [customerId, setCustomerId] = useState(editingDoc?.customerId || customers[0]?.id || "");
   const [date, setDate] = useState(editingDoc?.date ? String(editingDoc.date).slice(0, 10) : today());
   const [dueDate, setDueDate] = useState(editingDoc?.dueDate ? String(editingDoc.dueDate).slice(0, 10) : today());
-  const [lines, setLines] = useState(editingDoc?.lines?.length ? editingDoc.lines.map((ln: any) => ({ ...ln })) : [{ itemId: items[0]?.id || "", qty: 1, rate: items[0]?.price || 0 }]);
+  const [lines, setLines] = useState<InvoiceLine[]>(editingDoc?.lines?.length ? editingDoc.lines.map((ln: InvoiceLine) => ({ ...ln })) : [{ itemId: items[0]?.id || "", qty: 1, rate: items[0]?.price || 0 }]);
   const [notes, setNotes] = useState(editingDoc?.notes || "");
   const [rateEditIndex, setRateEditIndex] = useState<number | null>(null);
   const [freightCost, setFreightCost] = useState(editingDoc?.freightCost ? String(editingDoc.freightCost) : "");
