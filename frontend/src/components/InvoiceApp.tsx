@@ -220,6 +220,7 @@ function LocationPickerModal({ initialAddress, initialLat, initialLng, onClose, 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const autocompleteRef = useRef<any>(null);
   const [address, setAddress] = useState(initialAddress || "");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     initialLat && initialLng ? { lat: Number(initialLat), lng: Number(initialLng) } : null
@@ -241,42 +242,65 @@ function LocationPickerModal({ initialAddress, initialLat, initialLng, onClose, 
     loadGoogleMaps()
       .then(() => {
         if (cancelled || !mapDivRef.current) return;
-        const g = (window as any).google;
-        const start = coords || { lat: 22.9734, lng: 78.6569 }; // roughly central India as a default
-        const map = new g.maps.Map(mapDivRef.current, { center: start, zoom: coords ? 16 : 5 });
-        const marker = new g.maps.Marker({ position: start, map, draggable: true });
-        mapRef.current = map;
-        markerRef.current = marker;
+        try {
+          const g = (window as any).google;
+          const start = coords || { lat: 22.9734, lng: 78.6569 }; // roughly central India as a default
+          const map = new g.maps.Map(mapDivRef.current, { center: start, zoom: coords ? 16 : 5 });
+          const marker = new g.maps.Marker({ position: start, map, draggable: true });
+          mapRef.current = map;
+          markerRef.current = marker;
 
-        marker.addListener("dragend", () => {
-          const pos = marker.getPosition();
-          updateFromLatLng(pos.lat(), pos.lng());
-        });
-        map.addListener("click", (e: any) => {
-          marker.setPosition(e.latLng);
-          updateFromLatLng(e.latLng.lat(), e.latLng.lng());
-        });
-
-        if (searchInputRef.current) {
-          const autocomplete = new g.maps.places.Autocomplete(searchInputRef.current, { fields: ["geometry", "formatted_address", "name"] });
-          autocomplete.bindTo("bounds", map);
-          autocomplete.addListener("place_changed", () => {
-            const place = autocomplete.getPlace();
-            if (!place.geometry?.location) return;
-            const lat = place.geometry.location.lat();
-            const lng = place.geometry.location.lng();
-            map.setCenter({ lat, lng });
-            map.setZoom(16);
-            marker.setPosition({ lat, lng });
-            setCoords({ lat, lng });
-            setAddress(place.formatted_address || place.name || "");
+          marker.addListener("dragend", () => {
+            const pos = marker.getPosition();
+            updateFromLatLng(pos.lat(), pos.lng());
           });
+          map.addListener("click", (e: any) => {
+            marker.setPosition(e.latLng);
+            updateFromLatLng(e.latLng.lat(), e.latLng.lng());
+          });
+
+          if (searchInputRef.current) {
+            const autocomplete = new g.maps.places.Autocomplete(searchInputRef.current, { fields: ["geometry", "formatted_address", "name"] });
+            autocompleteRef.current = autocomplete;
+            autocomplete.bindTo("bounds", map);
+            autocomplete.addListener("place_changed", () => {
+              const place = autocomplete.getPlace();
+              if (!place.geometry?.location) return;
+              const lat = place.geometry.location.lat();
+              const lng = place.geometry.location.lng();
+              map.setCenter({ lat, lng });
+              map.setZoom(16);
+              marker.setPosition({ lat, lng });
+              setCoords({ lat, lng });
+              setAddress(place.formatted_address || place.name || "");
+            });
+          }
+          if (!cancelled) setStatus("ready");
+        } catch (e) {
+          if (!cancelled) setStatus("error");
         }
-        if (!cancelled) setStatus("ready");
       })
       .catch(() => { if (!cancelled) setStatus("error"); });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      const g = (window as any).google;
+      // Detach Autocomplete's listeners before React unmounts this tree.
+      if (autocompleteRef.current && g?.maps?.event) {
+        g.maps.event.clearInstanceListeners(autocompleteRef.current);
+      }
+      if (markerRef.current && g?.maps?.event) {
+        g.maps.event.clearInstanceListeners(markerRef.current);
+      }
+      if (mapRef.current && g?.maps?.event) {
+        g.maps.event.clearInstanceListeners(mapRef.current);
+      }
+      // Autocomplete injects a .pac-container into document.body, outside
+      // React's tree. If it's left behind, React's next reconciliation can
+      // try to remove a node that's already gone/moved, throwing
+      // "Failed to execute 'removeChild' on 'Node'" and crashing the app.
+      document.querySelectorAll(".pac-container").forEach((el) => el.remove());
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -304,9 +328,10 @@ function LocationPickerModal({ initialAddress, initialLat, initialLng, onClose, 
                 className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
               />
             </div>
-            <div ref={mapDivRef} className="w-full rounded-xl bg-slate-100" style={{ height: 320 }}>
+            <div className="relative w-full rounded-xl bg-slate-100" style={{ height: 320 }}>
+              <div ref={mapDivRef} className="absolute inset-0 rounded-xl overflow-hidden" />
               {status === "loading" && (
-                <div className="flex h-full items-center justify-center text-sm text-slate-400 gap-2">
+                <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400 gap-2 pointer-events-none">
                   <Loader2 size={16} className="animate-spin" /> Loading map…
                 </div>
               )}
@@ -1972,25 +1997,10 @@ function ToDoTrackingView({ items, settings }: any) {
 
 /* ---- Reports ---- */
 
-let gmapsPromise: Promise<any> | null = null;
-function loadGoogleMapsSDK(apiKey: string): Promise<any> {
-  if ((window as any).google?.maps) return Promise.resolve((window as any).google);
-  if (gmapsPromise) return gmapsPromise;
-  gmapsPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-    script.async = true;
-    script.onload = () => resolve((window as any).google);
-    script.onerror = () => reject(new Error("Failed to load Google Maps"));
-    document.head.appendChild(script);
-  });
-  return gmapsPromise;
-}
-
 function EstimatesMapCard({ invoices, currency }: any) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapError, setMapError] = useState("");
-  const apiKey = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  const apiKey = GOOGLE_MAPS_API_KEY || undefined;
 
   const byDestination: Record<string, { total: number; count: number }> = {};
   invoices.forEach((inv: any) => {
@@ -2006,7 +2016,8 @@ function EstimatesMapCard({ invoices, currency }: any) {
   useEffect(() => {
     if (!apiKey || destinations.length === 0 || !mapRef.current) return;
     let cancelled = false;
-    loadGoogleMapsSDK(apiKey).then((google) => {
+    loadGoogleMaps().then(() => {
+      const google = (window as any).google;
       if (cancelled || !mapRef.current) return;
       const map = new google.maps.Map(mapRef.current, { zoom: 5, center: { lat: 22.5, lng: 78.9 } });
       const geocoder = new google.maps.Geocoder();
