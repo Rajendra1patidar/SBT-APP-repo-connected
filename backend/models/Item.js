@@ -10,6 +10,7 @@ const itemSchema = new mongoose.Schema(
     unit: { type: String, trim: true },
     stock: { type: Number, default: 0 },
     lowStock: { type: Number, default: 5 },
+    category: { type: String, trim: true, default: "Others" },
   },
   { timestamps: true }
 );

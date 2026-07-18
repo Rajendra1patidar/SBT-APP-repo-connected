@@ -6,4 +6,6 @@ expenses, payments, and reports.
 
 ## Status
 
-will update item return update with inventory refresh feature
+Item returns are now supported: from any estimate, use "Return items" to record
+returned quantities, which books a refund for the customer and restocks inventory
+automatically.

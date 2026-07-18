@@ -18,6 +18,7 @@ const fmtDate = (d?: string) =>
 
 const WHATSAPP_GREEN = "#25D366";
 const LOW_STOCK_DEFAULT = 5;
+const ITEM_CATEGORIES = ["Saria", "Cement", "CPVC", "UPVC", "Kasta", "Others"];
 const GOOGLE_MAPS_API_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || "";
 
 let googleMapsLoadPromise: Promise<void> | null = null;
@@ -220,7 +221,6 @@ function LocationPickerModal({ initialAddress, initialLat, initialLng, onClose, 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
-  const autocompleteRef = useRef<any>(null);
   const [address, setAddress] = useState(initialAddress || "");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     initialLat && initialLng ? { lat: Number(initialLat), lng: Number(initialLng) } : null
@@ -261,7 +261,6 @@ function LocationPickerModal({ initialAddress, initialLat, initialLng, onClose, 
 
           if (searchInputRef.current) {
             const autocomplete = new g.maps.places.Autocomplete(searchInputRef.current, { fields: ["geometry", "formatted_address", "name"] });
-            autocompleteRef.current = autocomplete;
             autocomplete.bindTo("bounds", map);
             autocomplete.addListener("place_changed", () => {
               const place = autocomplete.getPlace();
@@ -282,25 +281,7 @@ function LocationPickerModal({ initialAddress, initialLat, initialLng, onClose, 
       })
       .catch(() => { if (!cancelled) setStatus("error"); });
 
-    return () => {
-      cancelled = true;
-      const g = (window as any).google;
-      // Detach Autocomplete's listeners before React unmounts this tree.
-      if (autocompleteRef.current && g?.maps?.event) {
-        g.maps.event.clearInstanceListeners(autocompleteRef.current);
-      }
-      if (markerRef.current && g?.maps?.event) {
-        g.maps.event.clearInstanceListeners(markerRef.current);
-      }
-      if (mapRef.current && g?.maps?.event) {
-        g.maps.event.clearInstanceListeners(mapRef.current);
-      }
-      // Autocomplete injects a .pac-container into document.body, outside
-      // React's tree. If it's left behind, React's next reconciliation can
-      // try to remove a node that's already gone/moved, throwing
-      // "Failed to execute 'removeChild' on 'Node'" and crashing the app.
-      document.querySelectorAll(".pac-container").forEach((el) => el.remove());
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -855,9 +836,12 @@ function OrderModal({ items, onClose, onSave }: any) {
           <div className="space-y-4">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-500">Item *</label>
-              <select value={itemId} onChange={(e) => setItemId(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                {items.map((it: any) => <option key={it.id} value={it.id}>{it.name} (current stock: {it.stock ?? 0})</option>)}
-              </select>
+              <SearchableSelect
+                options={items.map((it: any) => ({ value: it.id, label: `${it.name} (current stock: ${it.stock ?? 0})` }))}
+                value={itemId}
+                onChange={setItemId}
+                placeholder="Select item"
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-500">Qty to order *</label>
@@ -1371,15 +1355,40 @@ function CustomersView({ customers, openModal, removeCustomer }: any) {
 /* ---- Items (with stock display) ---- */
 
 function ItemsView({ items, openModal, removeItem, currency }: any) {
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+
+  const filtered = items.filter((it: any) => {
+    const matchesSearch = !search.trim() || it.name.toLowerCase().includes(search.trim().toLowerCase());
+    const matchesCategory = category === "All" || (it.category || "Others") === category;
+    return matchesSearch && matchesCategory;
+  });
+
   return (
     <div className="space-y-3 px-5 pb-28">
       <div className="flex items-center justify-between pt-1">
         <p className="text-sm text-slate-400">{items.length} item{items.length !== 1 ? "s" : ""}</p>
         <PillButton onClick={() => openModal("item")}><Plus size={16} /> New Item</PillButton>
       </div>
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search items..."
+          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {["All", ...ITEM_CATEGORIES].map((c) => (
+          <button key={c} onClick={() => setCategory(c)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${category === c ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"}`}>{c}</button>
+        ))}
+      </div>
       {items.length === 0
         ? <Card><EmptyState text="Add items you sell." cta="New Item" onCta={() => openModal("item")} /></Card>
-        : items.map((it: any) => {
+        : filtered.length === 0
+        ? <Card><p className="text-center text-sm text-slate-400">No items match your search/filter.</p></Card>
+        : filtered.map((it: any) => {
           const threshold = it.lowStock ?? LOW_STOCK_DEFAULT;
           const isLow = (it.stock ?? 0) <= threshold;
           return (
@@ -1387,6 +1396,7 @@ function ItemsView({ items, openModal, removeItem, currency }: any) {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="font-semibold text-slate-900">{it.name}</p>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">{it.category || "Others"}</span>
                   {isLow && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 flex items-center gap-1"><AlertTriangle size={10} /> Low stock</span>}
                 </div>
                 <p className="text-xs text-slate-400">{it.unit || "unit"} · Stock: <span className={`font-semibold ${isLow ? "text-amber-600" : "text-slate-700"}`}>{it.stock ?? 0}</span> (alert at ≤{threshold})</p>
@@ -1475,6 +1485,8 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
 
 function DocumentList({ type, docs, customers, currency, openModal, removeDoc, updateStatus, recordPayment, onShareInvoice, onPrint, onEdit, onReturn }: any) {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all"); // all | due | paid | returned
+  const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
   const customerName = (id: string) => customers.find((c: any) => c.id === id)?.name || "Unknown";
   const customerPhone = (id: string) => customers.find((c: any) => c.id === id)?.phone;
   const labelMap: any = { estimate: "Estimate", challan: "Challan" };
@@ -1482,10 +1494,109 @@ function DocumentList({ type, docs, customers, currency, openModal, removeDoc, u
     estimate: "Create estimates to send price quotes and invoices to customers.",
     challan: "Create delivery challans to track goods sent.",
   };
+  const monthKey = (d?: string) => (d || "").slice(0, 7) || "unknown";
+  const monthLabel = (key: string) => {
+    if (key === "unknown") return "No date";
+    const [y, m] = key.split("-");
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  };
+  const toggleMonth = (k: string) => setCollapsedMonths((s) => ({ ...s, [k]: !s[k] }));
+
   // docs already arrive newest-first from the API (and stay that way as new ones are prepended locally)
-  const visibleDocs = type === "estimate" && search.trim()
-    ? docs.filter((d: any) => (d.notes || "").toLowerCase().includes(search.trim().toLowerCase()))
-    : docs;
+  let visibleDocs = docs;
+  if (type === "estimate") {
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      visibleDocs = visibleDocs.filter((d: any) => (d.notes || "").toLowerCase().includes(q));
+    }
+    if (statusFilter === "due") visibleDocs = visibleDocs.filter((d: any) => d.status !== "Paid");
+    else if (statusFilter === "paid") visibleDocs = visibleDocs.filter((d: any) => d.status === "Paid");
+    else if (statusFilter === "returned") visibleDocs = visibleDocs.filter((d: any) => (d.returns || []).length > 0);
+  }
+
+  const monthGroups: { key: string; docs: any[] }[] = [];
+  if (type === "estimate") {
+    const map: Record<string, any[]> = {};
+    visibleDocs.forEach((d: any) => {
+      const k = monthKey(d.date);
+      if (!map[k]) { map[k] = []; monthGroups.push({ key: k, docs: map[k] }); }
+      map[k].push(d);
+    });
+  }
+
+  const renderCard = (d: any) => {
+    const isOverdue = type === "estimate" && d.status === "Due" && d.dueDate && new Date(d.dueDate) < new Date();
+    const displayStatus = isOverdue ? "Overdue" : d.status;
+    const msg = `Hi ${customerName(d.customerId)}, here is your ${labelMap[type].toLowerCase()} ${d.number} for ${fmtMoney(d.total, currency)}.`;
+    if (type === "challan") {
+      const totalExp = (d.expenses || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+      const totalInc = (d.incomes || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+      return (
+        <Card key={d.id}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-semibold text-slate-900">{d.number} · {d.route || "–"}</p>
+              <p className="text-xs text-slate-400">{fmtDate(d.fromDate)} → {fmtDate(d.toDate)}</p>
+            </div>
+            <Badge status={d.status} />
+          </div>
+          {(d.byWhom || d.transporter) && (
+            <div className="mt-2 flex gap-3 text-xs text-slate-500">
+              {d.byWhom && <span><span className="font-semibold text-slate-400">By:</span> {d.byWhom}</span>}
+              {d.transporter && <span><span className="font-semibold text-slate-400">Via:</span> {d.transporter}</span>}
+            </div>
+          )}
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            {totalExp > 0 && <div className="rounded-xl bg-rose-50 px-2 py-1.5"><p className="text-xs text-rose-400">Expenses</p><p className="text-sm font-bold text-rose-600">{fmtMoney(totalExp, currency)}</p></div>}
+            {totalInc > 0 && <div className="rounded-xl bg-emerald-50 px-2 py-1.5"><p className="text-xs text-emerald-500">Income</p><p className="text-sm font-bold text-emerald-700">{fmtMoney(totalInc, currency)}</p></div>}
+            {d.deliveryFee > 0 && (
+              <div className={`rounded-xl px-2 py-1.5 ${d.feeVerified ? "bg-blue-50" : "bg-amber-50 border border-amber-300"}`}>
+                <p className={`text-xs flex items-center justify-center gap-1 ${d.feeVerified ? "text-blue-400" : "text-amber-500"}`}>
+                  {!d.feeVerified && <AlertTriangle size={10} />}Delivery fee
+                </p>
+                <p className={`text-sm font-bold ${d.feeVerified ? "text-blue-700" : "text-amber-700"}`}>{fmtMoney(d.deliveryFee, currency)}</p>
+                {!d.feeVerified && <p className="text-xs text-amber-500 font-semibold">Unverified</p>}
+              </div>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <select value={d.status} onChange={(e) => updateStatus(d.id, e.target.value)} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
+              {["Pending","Delivered"].map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button onClick={() => removeDoc(d.id)} className="ml-auto rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={15} /></button>
+          </div>
+        </Card>
+      );
+    }
+
+    return (
+      <Card key={d.id}>
+        <div className="flex items-start justify-between">
+          <div><p className="font-semibold text-slate-900">{d.number}</p><p className="text-xs text-slate-400">{customerName(d.customerId)} · {fmtDate(d.date)}</p></div>
+          <Badge status={displayStatus} />
+        </div>
+        <p className="mt-3 text-lg font-bold text-slate-900">{fmtMoney(d.total, currency)}</p>
+        {type === "estimate" && d.notes && <p className="mt-1 text-xs text-slate-400 line-clamp-2">📝 {d.notes}</p>}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {type !== "challan" && (
+            <select value={d.status} onChange={(e) => updateStatus(d.id, e.target.value)} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
+              {["Accepted","Due","Paid"].map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {type === "estimate" && <GhostButton onClick={() => onEdit(d)}><Pencil size={13} /> Edit</GhostButton>}
+          {type === "estimate" && d.status !== "Paid" && <GhostButton onClick={() => recordPayment(d)}><CheckCircle2 size={13} /> Record payment</GhostButton>}
+          {type === "estimate" && (d.lines || []).length > 0 && <GhostButton onClick={() => onReturn(d)}><RotateCcw size={13} /> Return items</GhostButton>}
+          {type === "estimate" && <GhostButton onClick={() => onPrint(d)}><Printer size={13} /> Print</GhostButton>}
+          {type === "estimate"
+            ? <button onClick={() => onShareInvoice(d)} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition active:scale-[0.98]" style={{ backgroundColor: WHATSAPP_GREEN }}><Phone size={13} /> Share estimate</button>
+            : <WhatsAppButton phone={customerPhone(d.customerId)} message={msg} label="Send" />
+          }
+          <button onClick={() => removeDoc(d.id)} className="ml-auto rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={15} /></button>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-3 px-5 pb-28">
       <div className="flex items-center justify-between pt-1">
@@ -1493,92 +1604,44 @@ function DocumentList({ type, docs, customers, currency, openModal, removeDoc, u
         <PillButton onClick={() => openModal(type)}><Plus size={16} /> New {labelMap[type]}</PillButton>
       </div>
       {type === "estimate" && (
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search estimates by notes..."
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
-          />
-        </div>
+        <>
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search estimates by notes..."
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[["all", "All"], ["due", "Due"], ["paid", "Paid"], ["returned", "Returned items"]].map(([key, label]) => (
+              <button key={key} onClick={() => setStatusFilter(key)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusFilter === key ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"}`}>{label}</button>
+            ))}
+          </div>
+        </>
       )}
       {docs.length === 0
         ? <Card><EmptyState text={emptyMap[type]} cta={`New ${labelMap[type]}`} onCta={() => openModal(type)} /></Card>
-        : visibleDocs.length === 0
-        ? <Card><p className="text-center text-sm text-slate-400">No estimates match "{search}".</p></Card>
-        : visibleDocs.map((d: any) => {
-          const isOverdue = type === "estimate" && d.status === "Due" && d.dueDate && new Date(d.dueDate) < new Date();
-          const displayStatus = isOverdue ? "Overdue" : d.status;
-          const msg = `Hi ${customerName(d.customerId)}, here is your ${labelMap[type].toLowerCase()} ${d.number} for ${fmtMoney(d.total, currency)}.`;
-          if (type === "challan") {
-            const totalExp = (d.expenses || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
-            const totalInc = (d.incomes || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+        : type === "estimate"
+        ? (visibleDocs.length === 0
+          ? <Card><p className="text-center text-sm text-slate-400">No estimates match your search/filter.</p></Card>
+          : monthGroups.map((g, idx) => {
+            const isCollapsed = collapsedMonths[g.key] !== undefined ? collapsedMonths[g.key] : idx !== 0;
             return (
-              <Card key={d.id}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-slate-900">{d.number} · {d.route || "–"}</p>
-                    <p className="text-xs text-slate-400">{fmtDate(d.fromDate)} → {fmtDate(d.toDate)}</p>
-                  </div>
-                  <Badge status={d.status} />
-                </div>
-                {(d.byWhom || d.transporter) && (
-                  <div className="mt-2 flex gap-3 text-xs text-slate-500">
-                    {d.byWhom && <span><span className="font-semibold text-slate-400">By:</span> {d.byWhom}</span>}
-                    {d.transporter && <span><span className="font-semibold text-slate-400">Via:</span> {d.transporter}</span>}
-                  </div>
-                )}
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  {totalExp > 0 && <div className="rounded-xl bg-rose-50 px-2 py-1.5"><p className="text-xs text-rose-400">Expenses</p><p className="text-sm font-bold text-rose-600">{fmtMoney(totalExp, currency)}</p></div>}
-                  {totalInc > 0 && <div className="rounded-xl bg-emerald-50 px-2 py-1.5"><p className="text-xs text-emerald-500">Income</p><p className="text-sm font-bold text-emerald-700">{fmtMoney(totalInc, currency)}</p></div>}
-                  {d.deliveryFee > 0 && (
-                    <div className={`rounded-xl px-2 py-1.5 ${d.feeVerified ? "bg-blue-50" : "bg-amber-50 border border-amber-300"}`}>
-                      <p className={`text-xs flex items-center justify-center gap-1 ${d.feeVerified ? "text-blue-400" : "text-amber-500"}`}>
-                        {!d.feeVerified && <AlertTriangle size={10} />}Delivery fee
-                      </p>
-                      <p className={`text-sm font-bold ${d.feeVerified ? "text-blue-700" : "text-amber-700"}`}>{fmtMoney(d.deliveryFee, currency)}</p>
-                      {!d.feeVerified && <p className="text-xs text-amber-500 font-semibold">Unverified</p>}
-                    </div>
-                  )}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <select value={d.status} onChange={(e) => updateStatus(d.id, e.target.value)} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
-                    {["Pending","Delivered"].map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <button onClick={() => removeDoc(d.id)} className="ml-auto rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={15} /></button>
-                </div>
-              </Card>
+              <div key={g.key}>
+                <button onClick={() => toggleMonth(g.key)} className="flex w-full items-center justify-between rounded-xl bg-slate-100 px-4 py-2.5">
+                  <span className="text-sm font-bold text-slate-700">{monthLabel(g.key)}</span>
+                  <span className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    {g.docs.length} estimate{g.docs.length !== 1 ? "s" : ""}
+                    {isCollapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+                  </span>
+                </button>
+                {!isCollapsed && <div className="mt-2 space-y-3">{g.docs.map(renderCard)}</div>}
+              </div>
             );
-          }
-
-          return (
-            <Card key={d.id}>
-              <div className="flex items-start justify-between">
-                <div><p className="font-semibold text-slate-900">{d.number}</p><p className="text-xs text-slate-400">{customerName(d.customerId)} · {fmtDate(d.date)}</p></div>
-                <Badge status={displayStatus} />
-              </div>
-              <p className="mt-3 text-lg font-bold text-slate-900">{fmtMoney(d.total, currency)}</p>
-              {type === "estimate" && d.notes && <p className="mt-1 text-xs text-slate-400 line-clamp-2">📝 {d.notes}</p>}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {type !== "challan" && (
-                  <select value={d.status} onChange={(e) => updateStatus(d.id, e.target.value)} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
-                    {["Accepted","Due","Paid"].map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                )}
-                {type === "estimate" && <GhostButton onClick={() => onEdit(d)}><Pencil size={13} /> Edit</GhostButton>}
-                {type === "estimate" && d.status !== "Paid" && <GhostButton onClick={() => recordPayment(d)}><CheckCircle2 size={13} /> Record payment</GhostButton>}
-                {type === "estimate" && (d.lines || []).length > 0 && <GhostButton onClick={() => onReturn(d)}><RotateCcw size={13} /> Return items</GhostButton>}
-                {type === "estimate" && <GhostButton onClick={() => onPrint(d)}><Printer size={13} /> Print</GhostButton>}
-                {type === "estimate"
-                  ? <button onClick={() => onShareInvoice(d)} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition active:scale-[0.98]" style={{ backgroundColor: WHATSAPP_GREEN }}><Phone size={13} /> Share estimate</button>
-                  : <WhatsAppButton phone={customerPhone(d.customerId)} message={msg} label="Send" />
-                }
-                <button onClick={() => removeDoc(d.id)} className="ml-auto rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={15} /></button>
-              </div>
-            </Card>
-          );
-        })
+          }))
+        : visibleDocs.map(renderCard)
       }
     </div>
   );
@@ -1587,23 +1650,54 @@ function DocumentList({ type, docs, customers, currency, openModal, removeDoc, u
 /* ---- Payments ---- */
 
 function PaymentsView({ payments, customers, currency, openModal, removePayment }: any) {
+  const [tab, setTab] = useState<"received" | "refunds">("received");
+  const [search, setSearch] = useState("");
   const customerName = (id: string) => customers.find((c: any) => c.id === id)?.name || "Unknown";
+
+  const received = payments.filter((p: any) => Number(p.amount) >= 0);
+  const refunds = payments.filter((p: any) => Number(p.amount) < 0);
+  const list = tab === "received" ? received : refunds;
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? list.filter((p: any) => customerName(p.customerId).toLowerCase().includes(q) || (p.invoiceNumber || "").toLowerCase().includes(q))
+    : list;
+
   return (
     <div className="space-y-3 px-5 pb-28">
       <div className="flex items-center justify-between pt-1">
-        <p className="text-sm text-slate-400">{payments.length} payment{payments.length !== 1 ? "s" : ""}</p>
+        <p className="text-sm text-slate-400">{payments.length} total</p>
         <PillButton onClick={() => openModal("payment")}><Plus size={16} /> Record Payment</PillButton>
       </div>
-      {payments.length === 0
-        ? <Card><EmptyState text="Record payments you receive." cta="Record Payment" onCta={() => openModal("payment")} /></Card>
-        : payments.map((p: any) => (
+      <div className="flex gap-2">
+        <button onClick={() => setTab("received")} className={`rounded-full px-4 py-1.5 text-sm font-semibold ${tab === "received" ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"}`}>Payments Received ({received.length})</button>
+        <button onClick={() => setTab("refunds")} className={`rounded-full px-4 py-1.5 text-sm font-semibold ${tab === "refunds" ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-600"}`}>Refunds ({refunds.length})</button>
+      </div>
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by customer or estimate number..."
+          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
+        />
+      </div>
+      {list.length === 0
+        ? <Card><EmptyState text={tab === "received" ? "Record payments you receive." : "Refunds from returned items will show up here."} cta={tab === "received" ? "Record Payment" : undefined} onCta={() => openModal("payment")} /></Card>
+        : filtered.length === 0
+        ? <Card><p className="text-center text-sm text-slate-400">No matches for "{search}".</p></Card>
+        : filtered.map((p: any) => (
           <Card key={p.id} className="flex items-center justify-between">
             <div>
               <p className="font-semibold text-slate-900">{customerName(p.customerId)}</p>
-              <p className="text-xs text-slate-400">{fmtDate(p.date)}{p.method ? ` · ${p.method}` : ""}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-slate-400">{fmtDate(p.date)}{p.method ? ` · ${p.method}` : ""}</span>
+                {p.invoiceNumber
+                  ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">{p.invoiceNumber}</span>
+                  : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-400">No estimate linked</span>}
+              </div>
             </div>
             <div className="flex items-center gap-3">
-              <span className="font-bold text-emerald-600">+{fmtMoney(p.amount, currency)}</span>
+              <span className={`font-bold ${Number(p.amount) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{Number(p.amount) < 0 ? "−" : "+"}{fmtMoney(Math.abs(p.amount), currency)}</span>
               <button onClick={() => removePayment(p.id)} className="rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={16} /></button>
             </div>
           </Card>
@@ -2695,6 +2789,10 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   };
 
   const saveCustomer = async (v: any) => {
+    const normName = (s: string) => (s || "").trim().toLowerCase();
+    const normPhone = (s: string) => (s || "").replace(/\D/g, "");
+    const isDuplicate = customers.some((c) => normName(c.name) === normName(v.name) && normPhone(c.phone) === normPhone(v.phone));
+    if (isDuplicate) { showToast("A customer with this name and phone number already exists"); return; }
     try {
       const { locationLat, locationLng, ...rest } = v;
       const payload = { ...rest, ...(locationLat != null ? { lat: locationLat } : {}), ...(locationLng != null ? { lng: locationLng } : {}) };
@@ -2720,6 +2818,9 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   };
 
   const saveItem = async (v: any) => {
+    const normName = (s: string) => (s || "").trim().toLowerCase();
+    const isDuplicate = items.some((it) => normName(it.name) === normName(v.name));
+    if (isDuplicate) { showToast("An item with this name already exists"); return; }
     try {
       const doc = await api.items.create(v);
       setItems((c) => [doc, ...c]);
@@ -2999,12 +3100,13 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
 
     if (type === "item") return <FieldModal title="New Item" fields={[
       { key: "name",          label: "Item name",           required: true, placeholder: "Web design service" },
+      { key: "category",      label: "Category",            type: "select", options: ITEM_CATEGORIES.map((c) => ({ value: c, label: c })), required: true },
       { key: "sellingPrice",  label: "Selling price",       type: "number", required: true, placeholder: "0.00" },
       { key: "purchasePrice", label: "Purchase price",      type: "number", placeholder: "0.00" },
       { key: "unit",          label: "Unit",                placeholder: "hr / pc / job" },
       { key: "stock",         label: "Opening stock (qty)", type: "number", placeholder: "0" },
       { key: "lowStock",      label: "Low stock alert at",  type: "number", placeholder: `${LOW_STOCK_DEFAULT}` },
-    ]} onClose={closeModal} onSave={saveItem} />;
+    ]} initial={{ category: "Others" }} onClose={closeModal} onSave={saveItem} />;
 
     if (type === "expense") return <FieldModal title="Record Expense" fields={[
       { key: "category", label: "Category", required: true, placeholder: "Travel, Software..." },
