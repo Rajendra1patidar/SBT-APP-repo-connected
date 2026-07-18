@@ -16,6 +16,28 @@ const today = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
+/** Per-line advance-booking progress: how much of a booked qty has been collected/returned so far. */
+function bookingLineProgress(doc: any) {
+  const deliveredByItem: Record<string, number> = {};
+  for (const d of doc.deliveries || []) deliveredByItem[d.itemId] = (deliveredByItem[d.itemId] || 0) + d.qty;
+  const returnedByItem: Record<string, number> = {};
+  for (const r of doc.returns || []) returnedByItem[r.itemId] = (returnedByItem[r.itemId] || 0) + r.qty;
+
+  return (doc.lines || []).map((l: any) => {
+    const booked = Number(l.qty || 0);
+    const delivered = deliveredByItem[l.itemId] || 0;
+    const returned = returnedByItem[l.itemId] || 0;
+    const remaining = Math.max(booked - delivered - returned, 0);
+    return { itemId: l.itemId, rate: l.rate, booked, delivered, returned, remaining };
+  });
+}
+
+/** True once every booked line on this estimate has been fully collected (or returned). */
+function isFullyCollected(doc: any) {
+  const rows = bookingLineProgress(doc);
+  return rows.length > 0 && rows.every((r: any) => r.remaining <= 0);
+}
+
 const WHATSAPP_GREEN = "#25D366";
 const LOW_STOCK_DEFAULT = 5;
 const ITEM_CATEGORIES = ["Saria", "Cement", "CPVC", "UPVC", "Kasta", "Others"];
@@ -60,6 +82,7 @@ function fmtMoney(n: number | string, currency: string) {
 const STATUS_STYLES: Record<string, string> = {
   Accepted: "bg-blue-100 text-blue-700",
   Due: "bg-amber-100 text-amber-700",
+  "Partially Paid": "bg-sky-100 text-sky-700",
   Paid: "bg-emerald-100 text-emerald-700",
   Overdue: "bg-rose-100 text-rose-700",
   Pending: "bg-amber-100 text-amber-700",
@@ -405,8 +428,9 @@ function StatusChoicePopup({ total, currency, onChoose, onCancel }: any) {
         <h3 className="text-lg font-bold text-slate-900">Is this estimate paid?</h3>
         <p className="mt-1 text-sm text-slate-500">Total amount: <span className="font-semibold text-slate-700">{fmtMoney(total, currency)}</span></p>
         <div className="mt-5 space-y-2">
-          <button onClick={() => onChoose("Paid")} className="w-full rounded-full bg-emerald-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Paid — customer has paid</button>
-          <button onClick={() => onChoose("Due")} className="w-full rounded-full bg-amber-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Due — payment pending</button>
+          <button onClick={() => onChoose("Paid", false)} className="w-full rounded-full bg-emerald-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Paid — customer has paid</button>
+          <button onClick={() => onChoose("Due", false)} className="w-full rounded-full bg-amber-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Due — payment pending</button>
+          <button onClick={() => onChoose("Paid", true)} className="w-full rounded-full bg-blue-600 py-3 text-sm font-bold text-white active:scale-[0.98]">Advance Booking — paid now, collected in batches</button>
           <button onClick={onCancel} className="w-full rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-500">Back to editing</button>
         </div>
       </div>
@@ -427,7 +451,17 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
   const [includePreviousDue, setIncludePreviousDue] = useState(!isEditing);
   const [contractorName, setContractorName] = useState(editingDoc?.contractorName || "");
   const [destination, setDestination] = useState(editingDoc?.destination || "");
+  // tracks whether the destination field holds a value the user deliberately set/edited,
+  // so switching customers only auto-fills an empty/untouched destination and never overwrites it
+  const [destinationTouched, setDestinationTouched] = useState(!!editingDoc?.destination);
   const [pendingSave, setPendingSave] = useState<any>(null);
+
+  useEffect(() => {
+    if (type !== "estimate" || destinationTouched) return;
+    const customer = customers.find((c: any) => c.id === customerId);
+    if (customer?.location) setDestination(customer.location);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
 
   const knownContractors = Array.from(new Set((estimates || []).map((e: any) => e.contractorName).filter(Boolean))) as string[];
   const knownDestinations = Array.from(new Set((estimates || []).map((e: any) => e.destination).filter(Boolean))) as string[];
@@ -444,7 +478,7 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
 
   // when editing, exclude the estimate being edited itself from its own "previous due" calculation
   const previousDueEstimates = type === "estimate" && !isEditing ? (estimates || []).filter((e: any) => e.customerId === customerId && e.status !== "Paid") : [];
-  const previousDueAmount = previousDueEstimates.reduce((s: number, e: any) => s + Number(e.total || 0), 0);
+  const previousDueAmount = previousDueEstimates.reduce((s: number, e: any) => s + (Number(e.total || 0) - Number(e.amountPaid || 0)), 0);
   const previousDue = includePreviousDue ? previousDueAmount : 0;
 
   const total = itemsSubtotal + Number(freightCost || 0) + Number(labourCost || 0) + previousDue;
@@ -554,8 +588,9 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-500">Destination</label>
-                  <input list="destination-names" value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="Place / area" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                  <input list="destination-names" value={destination} onChange={(e) => { setDestination(e.target.value); setDestinationTouched(true); }} placeholder="Place / area" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                   <datalist id="destination-names">{knownDestinations.map((n) => <option key={n} value={n} />)}</datalist>
+                  <p className="mt-1 text-[11px] text-slate-400">Auto-filled from the customer's saved location — edit if this delivery goes elsewhere.</p>
                 </div>
               </div>
             )}
@@ -631,7 +666,7 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
         <StatusChoicePopup
           total={pendingSave.total}
           currency=""
-          onChoose={(status: string) => { onSave({ ...pendingSave, status }); setPendingSave(null); }}
+          onChoose={(status: string, isAdvanceBooking: boolean) => { onSave({ ...pendingSave, status, isAdvanceBooking }); setPendingSave(null); }}
           onCancel={() => setPendingSave(null)}
         />
       )}
@@ -946,11 +981,73 @@ function ReturnModal({ doc, items, currency, onClose, onSave }: any) {
 
 /* ---- InvoiceShareModal ---- */
 
+function DeliveryModal({ doc, items, onClose, onSave }: any) {
+  const rows = bookingLineProgress(doc)
+    .filter((r: any) => r.remaining > 0)
+    .map((r: any) => ({ ...r, name: items.find((it: any) => it.id === r.itemId)?.name || "Item" }));
+
+  const [qtyMap, setQtyMap] = useState<Record<string, string>>({});
+  const setQty = (itemId: string, v: string) => setQtyMap((m) => ({ ...m, [itemId]: v }));
+
+  const lines = rows
+    .map((r: any) => ({ ...r, collectQty: Math.min(Number(qtyMap[r.itemId] || 0), r.remaining) }))
+    .filter((r: any) => r.collectQty > 0);
+  const canSave = lines.length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4">
+      <div className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-lg font-bold text-slate-900">Record collection</h3>
+          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <p className="mb-4 text-xs text-slate-500">{doc.number} — enter how many of each booked item the customer is taking right now. Can't exceed what's still remaining.</p>
+
+        {rows.length === 0 ? (
+          <p className="text-sm text-slate-500">Everything booked on this estimate has already been collected.</p>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((r: any) => (
+              <div key={r.itemId} className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{r.name}</p>
+                  <p className="text-xs text-slate-400">
+                    {r.remaining} of {r.booked} remaining
+                    {r.delivered > 0 ? ` · ${r.delivered} collected so far` : ""}
+                  </p>
+                </div>
+                <input
+                  type="number" min="0" max={r.remaining} placeholder="0"
+                  value={qtyMap[r.itemId] || ""} onChange={(e) => setQty(r.itemId, e.target.value)}
+                  className="w-16 rounded-xl border border-slate-200 px-2 py-2 text-sm text-center"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-600">Cancel</button>
+          <button
+            disabled={!canSave}
+            onClick={() => canSave && onSave(lines.map((l: any) => ({ itemId: l.itemId, qty: l.collectQty })))}
+            className="flex-1 rounded-full bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            Record collection
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- InvoiceShareModal ---- */
+
 function InvoiceShareModal({ invoice, customer, items, settings, payment, onClose }: any) {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const isOverdue = invoice.status === "Due" && invoice.dueDate && new Date(invoice.dueDate) < new Date();
-  const statusLabel = invoice.status === "Paid" ? "PAID" : invoice.status === "Accepted" ? "ACCEPTED" : isOverdue ? "OVERDUE" : "DUE";
-  const statusColor = invoice.status === "Paid" ? "#10b981" : invoice.status === "Accepted" ? "#2563eb" : isOverdue ? "#e11d48" : "#d97706";
+  const statusLabel = invoice.status === "Paid" ? "PAID" : invoice.status === "Partially Paid" ? "PARTIALLY PAID" : invoice.status === "Accepted" ? "ACCEPTED" : isOverdue ? "OVERDUE" : "DUE";
+  const statusColor = invoice.status === "Paid" ? "#10b981" : invoice.status === "Partially Paid" ? "#0284c7" : invoice.status === "Accepted" ? "#2563eb" : isOverdue ? "#e11d48" : "#d97706";
 
   useEffect(() => {
     const canvas = document.createElement("canvas");
@@ -1009,6 +1106,10 @@ function InvoiceShareModal({ invoice, customer, items, settings, payment, onClos
     if (invoice.status === "Paid") {
       ctx.fillStyle = "#ecfdf5"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#10b981"; ctx.font = "bold 16px Arial";
       ctx.fillText(`✓ Payment received${payment ? " on " + fmtDate(payment.date) : ""}`, 80, y + 32);
+    } else if (invoice.status === "Partially Paid") {
+      const remaining = Number(invoice.total || 0) - Number(invoice.amountPaid || 0);
+      ctx.fillStyle = "#eff6ff"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#0284c7"; ctx.font = "bold 16px Arial";
+      ctx.fillText(`Partially paid — ${fmtMoney(remaining, settings.currency)} still due`, 80, y + 32);
     } else if (invoice.status === "Accepted") {
       ctx.fillStyle = "#eff6ff"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#2563eb"; ctx.font = "bold 16px Arial";
       ctx.fillText(`Accepted — payment due by ${fmtDate(invoice.dueDate)}`, 80, y + 32);
@@ -1024,11 +1125,16 @@ function InvoiceShareModal({ invoice, customer, items, settings, payment, onClos
     setImgUrl(canvas.toDataURL("image/png"));
   }, [invoice, customer, items, settings, payment, isOverdue, statusLabel, statusColor]);
 
+  const remainingDue = Number(invoice.total || 0) - Number(invoice.amountPaid || 0);
   const message = invoice.status === "Paid"
     ? `Hi ${customer?.name || ""}, thank you! Your payment for estimate ${invoice.number} (${fmtMoney(invoice.total, settings.currency)}) has been received.`
+    : invoice.status === "Partially Paid"
+    ? `Hi ${customer?.name || ""}, thanks for your payment on estimate ${invoice.number}. ${fmtMoney(remainingDue, settings.currency)} is still due.`
     : `Hi ${customer?.name || ""}, your estimate ${invoice.number} for ${fmtMoney(invoice.total, settings.currency)} is due on ${fmtDate(invoice.dueDate)}.`;
   const smsMsg = invoice.status === "Paid"
     ? `Hi ${customer?.name || ""}, payment for estimate ${invoice.number} (${fmtMoney(invoice.total, settings.currency)}) received. Thank you! - ${settings.orgName}`
+    : invoice.status === "Partially Paid"
+    ? `Hi ${customer?.name || ""}, payment received on estimate ${invoice.number}. ${fmtMoney(remainingDue, settings.currency)} still due. - ${settings.orgName}`
     : `Hi ${customer?.name || ""}, estimate ${invoice.number} for ${fmtMoney(invoice.total, settings.currency)} due ${fmtDate(invoice.dueDate)}. - ${settings.orgName}`;
 
   return (
@@ -1149,7 +1255,7 @@ function Topbar({ onMenu, settings, view }: any) {
 function Dashboard({ data, settings, openModal, go }: any) {
   const { customers, estimates, expenses, items, payments } = data;
   const [tab, setTab] = useState("estimates");
-  const outstanding = estimates.filter((i: any) => i.status !== "Paid").reduce((s: number, i: any) => s + i.total, 0);
+  const outstanding = estimates.filter((i: any) => i.status !== "Paid").reduce((s: number, i: any) => s + (Number(i.total || 0) - Number(i.amountPaid || 0)), 0);
   const byCategory: any = {};
   expenses.forEach((e: any) => { byCategory[e.category] = (byCategory[e.category] || 0) + Number(e.amount); });
   const catEntries = Object.entries(byCategory) as [string, number][];
@@ -1406,6 +1512,7 @@ function ItemsView({ items, openModal, removeItem, currency }: any) {
                   <p className="text-xs text-slate-400">Sell: <span className="font-bold text-slate-800">{fmtMoney(it.sellingPrice ?? it.price, currency)}</span></p>
                   {it.purchasePrice > 0 && <p className="text-xs text-slate-400">Buy: <span className="font-semibold text-slate-600">{fmtMoney(it.purchasePrice, currency)}</span></p>}
                 </div>
+                <button onClick={() => openModal("item", { editingItem: it })} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><Pencil size={16} /></button>
                 <button onClick={() => removeItem(it.id)} className="rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={16} /></button>
               </div>
             </Card>
@@ -1419,9 +1526,12 @@ function ItemsView({ items, openModal, removeItem, currency }: any) {
 /* ---- Orders ---- */
 
 function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }: any) {
+  const [category, setCategory] = useState("All");
   const itemName = (id: string) => items.find((it: any) => it.id === id)?.name || "Unknown item";
-  const pending = orders.filter((o: any) => o.status === "Pending");
-  const received = orders.filter((o: any) => o.status === "Received");
+  const itemCategory = (id: string) => items.find((it: any) => it.id === id)?.category || "Others";
+  const categoryFiltered = category === "All" ? orders : orders.filter((o: any) => itemCategory(o.itemId) === category);
+  const pending = categoryFiltered.filter((o: any) => o.status === "Pending");
+  const received = categoryFiltered.filter((o: any) => o.status === "Received");
 
   return (
     <div className="space-y-3 px-5 pb-28">
@@ -1429,9 +1539,16 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
         <p className="text-sm text-slate-400">{orders.length} order{orders.length !== 1 ? "s" : ""}</p>
         <PillButton onClick={() => openModal("order")}><Plus size={16} /> New Order</PillButton>
       </div>
+      <div className="flex flex-wrap gap-2">
+        {["All", ...ITEM_CATEGORIES].map((c) => (
+          <button key={c} onClick={() => setCategory(c)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${category === c ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"}`}>{c}</button>
+        ))}
+      </div>
 
       {orders.length === 0
         ? <Card><EmptyState text="Place orders to restock your inventory. Marking an order as Received will automatically update the item's stock." cta="New Order" onCta={() => openModal("order")} /></Card>
+        : pending.length === 0 && received.length === 0
+        ? <Card><p className="text-center text-sm text-slate-400">No orders match this category.</p></Card>
         : (
           <>
             {pending.length > 0 && (
@@ -1483,7 +1600,7 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
 
 /* ---- DocumentList ---- */
 
-function DocumentList({ type, docs, customers, currency, openModal, removeDoc, updateStatus, recordPayment, onShareInvoice, onPrint, onEdit, onReturn }: any) {
+function DocumentList({ type, docs, customers, items, currency, openModal, removeDoc, updateStatus, recordPayment, onShareInvoice, onPrint, onEdit, onReturn, onDeliver }: any) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all | due | paid | returned
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
@@ -1572,19 +1689,54 @@ function DocumentList({ type, docs, customers, currency, openModal, removeDoc, u
     return (
       <Card key={d.id}>
         <div className="flex items-start justify-between">
-          <div><p className="font-semibold text-slate-900">{d.number}</p><p className="text-xs text-slate-400">{customerName(d.customerId)} · {fmtDate(d.date)}</p></div>
-          <Badge status={displayStatus} />
+          <div>
+            <p className="font-semibold text-slate-900">{d.number}</p>
+            <p className="text-xs text-slate-400">{customerName(d.customerId)} · {fmtDate(d.date)}</p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <Badge status={displayStatus} />
+            {type === "estimate" && d.isAdvanceBooking && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Advance Booking</span>
+            )}
+          </div>
         </div>
         <p className="mt-3 text-lg font-bold text-slate-900">{fmtMoney(d.total, currency)}</p>
+        {type === "estimate" && d.status !== "Due" && Number(d.amountPaid || 0) > 0 && (
+          <p className="mt-0.5 text-xs text-slate-500">
+            Paid {fmtMoney(d.amountPaid, currency)}
+            {d.status !== "Paid" && <span className="text-amber-600 font-semibold"> · {fmtMoney(Number(d.total || 0) - Number(d.amountPaid || 0), currency)} due</span>}
+          </p>
+        )}
         {type === "estimate" && d.notes && <p className="mt-1 text-xs text-slate-400 line-clamp-2">📝 {d.notes}</p>}
+        {type === "estimate" && d.isAdvanceBooking && (() => {
+          const rows = bookingLineProgress(d);
+          const pending = rows.filter((r: any) => r.remaining > 0);
+          if (rows.length === 0) return null;
+          const itemName = (id: string) => items?.find?.((it: any) => it.id === id)?.name;
+          return (
+            <div className="mt-2 rounded-xl bg-blue-50 px-3 py-2">
+              <p className="text-xs font-semibold text-blue-700 mb-1">{pending.length > 0 ? "Advance booking — collection pending" : "Advance booking — fully collected"}</p>
+              {pending.length > 0 && (
+                <div className="space-y-0.5">
+                  {pending.map((r: any) => (
+                    <p key={r.itemId} className="text-xs text-blue-600">
+                      {itemName(r.itemId) || "Item"}: {r.remaining} of {r.booked} remaining{r.delivered > 0 ? ` (${r.delivered} collected)` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {type !== "challan" && (
             <select value={d.status} onChange={(e) => updateStatus(d.id, e.target.value)} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
-              {["Accepted","Due","Paid"].map((s) => <option key={s} value={s}>{s}</option>)}
+              {["Accepted","Due","Partially Paid","Paid"].map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
           {type === "estimate" && <GhostButton onClick={() => onEdit(d)}><Pencil size={13} /> Edit</GhostButton>}
           {type === "estimate" && d.status !== "Paid" && <GhostButton onClick={() => recordPayment(d)}><CheckCircle2 size={13} /> Record payment</GhostButton>}
+          {type === "estimate" && d.isAdvanceBooking && (d.lines || []).length > 0 && !isFullyCollected(d) && <GhostButton onClick={() => onDeliver(d)}><Truck size={13} /> Record collection</GhostButton>}
           {type === "estimate" && (d.lines || []).length > 0 && <GhostButton onClick={() => onReturn(d)}><RotateCcw size={13} /> Return items</GhostButton>}
           {type === "estimate" && <GhostButton onClick={() => onPrint(d)}><Printer size={13} /> Print</GhostButton>}
           {type === "estimate"
@@ -1974,11 +2126,13 @@ function LabourTrackingView({ sessions, knownWorkers, onSave, onRemove, currency
   );
 }
 
-function ToDoTrackingView({ items, settings }: any) {
+function ToDoTrackingView({ items, settings, openModal }: any) {
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [category, setCategory] = useState("All");
 
   const lowItems = items.filter((it: any) => (it.stock ?? 0) <= (it.lowStock ?? LOW_STOCK_DEFAULT));
-  const allItems = [...items].sort((a: any, b: any) => (a.stock ?? 0) - (b.stock ?? 0));
+  const categoryFiltered = category === "All" ? items : items.filter((it: any) => (it.category || "Others") === category);
+  const allItems = [...categoryFiltered].sort((a: any, b: any) => (a.stock ?? 0) - (b.stock ?? 0));
 
   const stockColor = (it: any) => {
     const s = it.stock ?? 0;
@@ -2035,9 +2189,12 @@ function ToDoTrackingView({ items, settings }: any) {
                   <p className="font-semibold text-slate-900">{it.name}</p>
                   <p className="text-xs text-slate-500">{it.unit || "unit"} · Alert threshold: {it.lowStock ?? LOW_STOCK_DEFAULT}</p>
                 </div>
-                <div className="text-right">
-                  <p className={`text-xl font-bold ${(it.stock ?? 0) === 0 ? "text-rose-600" : "text-amber-600"}`}>{it.stock ?? 0}</p>
-                  <p className="text-xs text-slate-400">in stock</p>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <p className={`text-xl font-bold ${(it.stock ?? 0) === 0 ? "text-rose-600" : "text-amber-600"}`}>{it.stock ?? 0}</p>
+                    <p className="text-xs text-slate-400">in stock</p>
+                  </div>
+                  <button onClick={() => openModal("item", { editingItem: it })} className="rounded-full p-2 text-slate-400 hover:bg-white"><Pencil size={15} /></button>
                 </div>
               </li>
             ))}
@@ -2064,19 +2221,29 @@ function ToDoTrackingView({ items, settings }: any) {
 
         {inventoryOpen && (
           <div className="mt-4">
+            <div className="mb-3 flex flex-wrap gap-2">
+              {["All", ...ITEM_CATEGORIES].map((c) => (
+                <button key={c} onClick={() => setCategory(c)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${category === c ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"}`}>{c}</button>
+              ))}
+            </div>
             {items.length === 0 ? (
               <p className="text-sm text-slate-400">No items added yet. Go to Items to add your first product.</p>
+            ) : allItems.length === 0 ? (
+              <p className="text-sm text-slate-400">No items match this category.</p>
             ) : (
               <ul className="space-y-2">
                 {allItems.map((it: any) => (
                   <li key={it.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-2.5">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{it.name}</p>
-                      <p className="text-xs text-slate-400">{it.unit || "unit"}</p>
+                      <p className="text-xs text-slate-400">{it.unit || "unit"} · {it.category || "Others"}</p>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-base font-bold ${stockColor(it)}`}>{it.stock ?? 0}</p>
-                      <p className="text-xs text-slate-400">/ alert ≤{it.lowStock ?? LOW_STOCK_DEFAULT}</p>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <p className={`text-base font-bold ${stockColor(it)}`}>{it.stock ?? 0}</p>
+                        <p className="text-xs text-slate-400">/ alert ≤{it.lowStock ?? LOW_STOCK_DEFAULT}</p>
+                      </div>
+                      <button onClick={() => openModal("item", { editingItem: it })} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><Pencil size={15} /></button>
                     </div>
                   </li>
                 ))}
@@ -2183,7 +2350,7 @@ function ReportsView({ data, currency, settings }: any) {
   const totalInvoiced = invoices.reduce((s: number, i: any) => s + i.total, 0);
   const totalReceived = payments.reduce((s: number, p: any) => s + Number(p.amount), 0);
   const totalExpenses = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
-  const outstanding = invoices.filter((i: any) => i.status !== "Paid").reduce((s: number, i: any) => s + i.total, 0);
+  const outstanding = invoices.filter((i: any) => i.status !== "Paid").reduce((s: number, i: any) => s + (Number(i.total || 0) - Number(i.amountPaid || 0)), 0);
   const rangeLabour = (labourSessions || []).filter((s: any) => s.date >= fromDate && s.date <= toDate);
   const rangeLabourTotal = rangeLabour.reduce((s: number, x: any) => s + Number(x.total || 0), 0);
   const statusCounts: Record<string, number> = {};
@@ -2819,14 +2986,21 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
 
   const saveItem = async (v: any) => {
     const normName = (s: string) => (s || "").trim().toLowerCase();
-    const isDuplicate = items.some((it) => normName(it.name) === normName(v.name));
+    const isDuplicate = items.some((it) => it.id !== v.id && normName(it.name) === normName(v.name));
     if (isDuplicate) { showToast("An item with this name already exists"); return; }
     try {
-      const doc = await api.items.create(v);
-      setItems((c) => [doc, ...c]);
-      showToast("Item added");
+      if (v.id) {
+        const { id, ...rest } = v;
+        const doc = await api.items.update(id, rest);
+        setItems((c) => c.map((x) => (x.id === id ? doc : x)));
+        showToast("Item updated");
+      } else {
+        const doc = await api.items.create(v);
+        setItems((c) => [doc, ...c]);
+        showToast("Item added");
+      }
       closeModal();
-    } catch (err) { onApiError(err, "Failed to add item"); }
+    } catch (err) { onApiError(err, "Failed to save item"); }
   };
 
   const removeItem = async (id: string) => {
@@ -2861,6 +3035,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
         payload.contractorName = v.contractorName || "";
         payload.destination = v.destination || "";
         if (v.status) payload.status = v.status; // Due/Paid choice from the confirmation popup, create-only
+        if (v.isAdvanceBooking) payload.isAdvanceBooking = true; // only true when "Advance Booking" was picked in that popup
       }
 
       if (v.id) {
@@ -2901,17 +3076,17 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
 
   const updateDocStatus = (type: string) => async (id: string, s: string) => {
     try {
-      await api.documents(type as any).updateStatus(id, s);
-      docSetter(type)((list: any[]) => list.map((x) => (x.id === id ? { ...x, status: s } : x)));
+      const doc = await api.documents(type as any).updateStatus(id, s);
+      docSetter(type)((list: any[]) => list.map((x) => (x.id === id ? doc : x)));
     } catch (err) { onApiError(err, "Failed to update status"); }
   };
 
   const savePayment = async (v: any) => {
     try {
-      const doc = await api.payments.create(v);
-      setPayments((p) => [doc, ...p]);
-      if (v.invoiceId) setEstimates((list) => list.map((i) => (i.id === v.invoiceId ? { ...i, status: "Paid" } : i)));
-      showToast("Payment recorded");
+      const { payment, invoice } = await api.payments.create(v);
+      setPayments((p) => [payment, ...p]);
+      if (invoice) setEstimates((list) => list.map((i) => (i.id === invoice.id ? invoice : i)));
+      showToast(invoice?.status === "Paid" ? "Payment recorded — estimate fully paid" : invoice?.status === "Partially Paid" ? "Partial payment recorded" : "Payment recorded");
       closeModal();
     } catch (err) { onApiError(err, "Failed to record payment"); }
   };
@@ -2927,9 +3102,22 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     } catch (err) { onApiError(err, "Failed to record return"); }
   };
 
+  const saveDelivery = async (docId: string, lines: { itemId: string; qty: number }[]) => {
+    try {
+      const { doc } = await api.documents("estimate").addDelivery(docId, lines);
+      setEstimates((list) => list.map((e) => (e.id === docId ? doc : e)));
+      const totalQty = lines.reduce((s, l) => s + Number(l.qty || 0), 0);
+      showToast(`Collection recorded: ${totalQty} item${totalQty !== 1 ? "s" : ""} taken`);
+      closeModal();
+    } catch (err) { onApiError(err, "Failed to record collection"); }
+  };
+
   const removePayment = async (id: string) => {
-    try { await api.payments.remove(id); setPayments((c) => c.filter((x) => x.id !== id)); }
-    catch (err) { onApiError(err, "Failed to delete payment"); }
+    try {
+      const { invoice } = await api.payments.remove(id);
+      setPayments((c) => c.filter((x) => x.id !== id));
+      if (invoice) setEstimates((list) => list.map((i) => (i.id === invoice.id ? invoice : i)));
+    } catch (err) { onApiError(err, "Failed to delete payment"); }
   };
 
   const saveOrder = async (v: any) => {
@@ -2956,7 +3144,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   };
 
   const openModal = (type: string, payload?: any) => setModal({ type, payload });
-  const recordPaymentFor = (invoice: any) => openModal("payment", { invoiceId: invoice.id, customerId: invoice.customerId, amount: invoice.total });
+  const recordPaymentFor = (invoice: any) => openModal("payment", { invoiceId: invoice.id, customerId: invoice.customerId, amount: Number(invoice.total || 0) - Number(invoice.amountPaid || 0) });
 
   const saveLabourSession = async (v: any) => {
     try {
@@ -2996,6 +3184,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
 
     const statusNote = invoice.status === "Paid"
       ? "PAID"
+      : invoice.status === "Partially Paid"
+      ? `Partially paid — ${fmtMoney(Number(invoice.total || 0) - Number(invoice.amountPaid || 0), settings.currency)} due`
       : invoice.status === "Accepted"
       ? `Accepted — due ${fmtDate(invoice.dueDate)}`
       : `Due ${fmtDate(invoice.dueDate)}`;
@@ -3065,10 +3255,10 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
             <button onClick={togglePrintSide} className="font-semibold text-blue-600">Switch side ⇄</button>
           </div>
           <div className="-mx-5">
-            <DocumentList type="estimate" docs={estimates} customers={customers} currency={settings.currency} openModal={openModal}
+            <DocumentList type="estimate" docs={estimates} customers={customers} items={items} currency={settings.currency} openModal={openModal}
               removeDoc={removeDoc("estimate")}
               updateStatus={updateDocStatus("estimate")}
-              recordPayment={recordPaymentFor} onReturn={(doc: any) => openModal("return", { doc })} onShareInvoice={(inv: any) => setShareInvoice(inv)}
+              recordPayment={recordPaymentFor} onReturn={(doc: any) => openModal("return", { doc })} onDeliver={(doc: any) => openModal("delivery", { doc })} onShareInvoice={(inv: any) => setShareInvoice(inv)}
               onPrint={printEstimate}
               onEdit={(doc: any) => openModal("estimate", { editingDoc: doc })} />
           </div>
@@ -3076,7 +3266,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       );
       case "payments":  return <PaymentsView payments={payments} customers={customers} currency={settings.currency} openModal={openModal} removePayment={removePayment} />;
       case "expenses":  return <ExpensesView expenses={expenses} currency={settings.currency} openModal={openModal} removeExpense={removeExpense} />;
-      case "todo":      return <ToDoTrackingView items={items} settings={settings} />;
+      case "todo":      return <ToDoTrackingView items={items} settings={settings} openModal={openModal} />;
       case "labour":    return <LabourTrackingView sessions={labourSessions} knownWorkers={labourWorkers} onSave={saveLabourSession} onRemove={removeLabourSession} currency={settings.currency} />;
       case "contractors": return <ContractorScorecardView estimates={estimates} items={items} currency={settings.currency} />;
       case "reports":      return <ReportsView data={data} currency={settings.currency} settings={settings} />;
@@ -3098,15 +3288,22 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       { key: "location", label: "Location / Address",                type: "location", placeholder: "City, area or full address" },
     ]} onClose={closeModal} onSave={saveCustomer} />;
 
-    if (type === "item") return <FieldModal title="New Item" fields={[
-      { key: "name",          label: "Item name",           required: true, placeholder: "Web design service" },
-      { key: "category",      label: "Category",            type: "select", options: ITEM_CATEGORIES.map((c) => ({ value: c, label: c })), required: true },
-      { key: "sellingPrice",  label: "Selling price",       type: "number", required: true, placeholder: "0.00" },
-      { key: "purchasePrice", label: "Purchase price",      type: "number", placeholder: "0.00" },
-      { key: "unit",          label: "Unit",                placeholder: "hr / pc / job" },
-      { key: "stock",         label: "Opening stock (qty)", type: "number", placeholder: "0" },
-      { key: "lowStock",      label: "Low stock alert at",  type: "number", placeholder: `${LOW_STOCK_DEFAULT}` },
-    ]} initial={{ category: "Others" }} onClose={closeModal} onSave={saveItem} />;
+    if (type === "item") {
+      const editingItem = payload?.editingItem;
+      return <FieldModal title={editingItem ? "Edit Item" : "New Item"} fields={[
+        { key: "name",          label: "Item name",           required: true, placeholder: "Web design service" },
+        { key: "category",      label: "Category",            type: "select", options: ITEM_CATEGORIES.map((c) => ({ value: c, label: c })), required: true },
+        { key: "sellingPrice",  label: "Selling price",       type: "number", required: true, placeholder: "0.00" },
+        { key: "purchasePrice", label: "Purchase price",      type: "number", placeholder: "0.00" },
+        { key: "unit",          label: "Unit",                placeholder: "hr / pc / job" },
+        { key: "stock",         label: editingItem ? "Stock (qty)" : "Opening stock (qty)", type: "number", placeholder: "0" },
+        { key: "lowStock",      label: "Low stock alert at",  type: "number", placeholder: `${LOW_STOCK_DEFAULT}` },
+      ]} initial={editingItem ? {
+        id: editingItem.id, name: editingItem.name, category: editingItem.category || "Others",
+        sellingPrice: editingItem.sellingPrice ?? editingItem.price, purchasePrice: editingItem.purchasePrice,
+        unit: editingItem.unit, stock: editingItem.stock, lowStock: editingItem.lowStock ?? LOW_STOCK_DEFAULT,
+      } : { category: "Others" }} onClose={closeModal} onSave={saveItem} />;
+    }
 
     if (type === "expense") return <FieldModal title="Record Expense" fields={[
       { key: "category", label: "Category", required: true, placeholder: "Travel, Software..." },
@@ -3124,7 +3321,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       return <DocumentModal type={type} customers={customers} items={items} estimates={estimates} editingDoc={payload?.editingDoc} onClose={closeModal} onSave={(v: any) => saveDocument(type, v)} />;
 
     if (type === "payment") {
-      const invoiceOptions = estimates.filter((i) => i.status !== "Paid").map((i) => ({ value: i.id, label: `${i.number} — ${fmtMoney(i.total, settings.currency)}` }));
+      const invoiceOptions = estimates.filter((i) => i.status !== "Paid").map((i) => ({ value: i.id, label: `${i.number} — ${fmtMoney(Number(i.total || 0) - Number(i.amountPaid || 0), settings.currency)} due` }));
       const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
       return <FieldModal title="Record Payment" fields={[
         { key: "customerId", label: "Customer", type: "select", options: customerOptions, required: true },
@@ -3138,6 +3335,10 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     if (type === "return") {
       return <ReturnModal doc={payload?.doc} items={items} currency={settings.currency} onClose={closeModal}
         onSave={(lines: { itemId: string; qty: number }[]) => saveReturn(payload?.doc?.id, lines)} />;
+    }
+    if (type === "delivery") {
+      return <DeliveryModal doc={payload?.doc} items={items} onClose={closeModal}
+        onSave={(lines: { itemId: string; qty: number }[]) => saveDelivery(payload?.doc?.id, lines)} />;
     }
     return null;
   };

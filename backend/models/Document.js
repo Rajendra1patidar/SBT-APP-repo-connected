@@ -21,6 +21,12 @@ const documentSchema = new mongoose.Schema(
     notes: { type: String },
     total: { type: Number, default: 0 },
     status: { type: String, default: "Due" },
+    // running total of payments applied against this document (positive payments minus refunds),
+    // used to distinguish Due / Partially Paid / Paid instead of a plain binary flag
+    amountPaid: { type: Number, default: 0 },
+    // only true when the user explicitly chose "Advance Booking" at save time — gates the
+    // batch-collection feature so it doesn't show up on ordinary estimates
+    isAdvanceBooking: { type: Boolean, default: false },
     // estimate-specific extra charges/carry-forward
     freightCost: { type: Number, default: 0 },
     labourCost: { type: Number, default: 0 },
@@ -45,6 +51,18 @@ const documentSchema = new mongoose.Schema(
         qty: { type: Number },
         rate: { type: Number },
         amount: { type: Number },
+        date: { type: String },
+        _id: false,
+      },
+    ],
+    // advance-booking support: an estimate can be booked/paid up front but collected in
+    // arbitrary batches over time (e.g. 100 bags booked, taken 30 + 25 + ... later).
+    // Each entry logs one collected batch; it never exceeds the booked line qty.
+    deliveries: [
+      {
+        itemId: { type: mongoose.Schema.Types.ObjectId, ref: "Item" },
+        name: { type: String },
+        qty: { type: Number },
         date: { type: String },
         _id: false,
       },
