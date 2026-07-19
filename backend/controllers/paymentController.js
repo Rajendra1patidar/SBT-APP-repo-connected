@@ -1,4 +1,4 @@
-const Payment = require("../models/Payment");
+﻿const Payment = require("../models/Payment");
 const Document = require("../models/Document");
 const crudController = require("./crudController");
 
@@ -6,7 +6,7 @@ const base = crudController(Payment);
 
 // recompute an invoice's amountPaid + status from the sum of every payment/refund
 // linked to it (Due -> Partially Paid -> Paid), rather than a blind binary flag
-async function recalcInvoice(owner, invoiceId) {
+async function recalcInvoice(owner, invoiceId, historyEntry) {
   const invoice = await Document.findOne({ _id: invoiceId, owner, type: "estimate" });
   if (!invoice) return null;
 
@@ -18,6 +18,8 @@ async function recalcInvoice(owner, invoiceId) {
   if (total > 0 && paidSoFar >= total) invoice.status = "Paid";
   else if (paidSoFar > 0) invoice.status = "Partially Paid";
   else invoice.status = "Due";
+
+  if (historyEntry) invoice.history = [...(invoice.history || []), historyEntry];
 
   await invoice.save();
   return invoice;
@@ -46,7 +48,12 @@ base.create = async (req, res, next) => {
 
     let invoice = null;
     if (v.invoiceId) {
-      invoice = await recalcInvoice(req.userId, v.invoiceId);
+      const isRefund = Number(v.amount) < 0;
+      invoice = await recalcInvoice(req.userId, v.invoiceId, {
+        action: isRefund ? "Refund issued" : "Payment received",
+        date: payment.date,
+        note: `${v.method || "Cash"} Â· ${Math.abs(Number(v.amount))}`,
+      });
     }
 
     res.status(201).json({ payment, invoice });
@@ -64,7 +71,11 @@ base.remove = async (req, res, next) => {
 
     let invoice = null;
     if (payment.invoiceId) {
-      invoice = await recalcInvoice(req.userId, payment.invoiceId);
+      invoice = await recalcInvoice(req.userId, payment.invoiceId, {
+        action: "Payment entry removed",
+        date: new Date().toISOString().slice(0, 10),
+        note: `${payment.method || "Cash"} Â· ${Math.abs(Number(payment.amount))}`,
+      });
     }
 
     res.json({ message: "Deleted", id: req.params.id, invoice });

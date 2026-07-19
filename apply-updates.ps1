@@ -1,4 +1,14 @@
-﻿import React, { useState, useRef, useEffect } from "react";
+# ============================================================
+# SBT App — apply all 9 feature updates
+# Run this from the ROOT of your repo (sbt-app-repo-booking)
+#   PS C:\Users\...\sbt-app-repo-booking> .\apply-updates.ps1
+# ============================================================
+
+Write-Host "Applying SBT App updates..." -ForegroundColor Cyan
+
+New-Item -ItemType Directory -Force -Path (Split-Path "frontend\src\Components\InvoiceApp.tsx") | Out-Null
+@'
+import React, { useState, useRef, useEffect } from "react";
 import {
   Menu, X, Home, Users, ShoppingBag, FileText, Truck, Receipt,
   ArrowDownToLine, Wallet, BarChart3, Globe2, Settings as SettingsIcon,
@@ -14,7 +24,7 @@ import { api } from "../lib/api";
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (d?: string) =>
-  d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "â€”";
+  d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 /** Per-line advance-booking progress: how much of a booked qty has been collected/returned so far. */
 function bookingLineProgress(doc: any) {
@@ -336,7 +346,7 @@ function LocationPickerModal({ initialAddress, initialLat, initialLng, onClose, 
               <div ref={mapDivRef} className="absolute inset-0 rounded-xl overflow-hidden" />
               {status === "loading" && (
                 <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400 gap-2 pointer-events-none">
-                  <Loader2 size={16} className="animate-spin" /> Loading mapâ€¦
+                  <Loader2 size={16} className="animate-spin" /> Loading map…
                 </div>
               )}
             </div>
@@ -428,9 +438,9 @@ function StatusChoicePopup({ total, currency, onChoose, onCancel }: any) {
         <h3 className="text-lg font-bold text-slate-900">Is this estimate paid?</h3>
         <p className="mt-1 text-sm text-slate-500">Total amount: <span className="font-semibold text-slate-700">{fmtMoney(total, currency)}</span></p>
         <div className="mt-5 space-y-2">
-          <button onClick={() => onChoose("Paid", false)} className="w-full rounded-full bg-emerald-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Paid â€” customer has paid</button>
-          <button onClick={() => onChoose("Due", false)} className="w-full rounded-full bg-amber-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Due â€” payment pending</button>
-          <button onClick={() => onChoose("Paid", true)} className="w-full rounded-full bg-blue-600 py-3 text-sm font-bold text-white active:scale-[0.98]">Advance Booking â€” paid now, collected in batches</button>
+          <button onClick={() => onChoose("Paid", false)} className="w-full rounded-full bg-emerald-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Paid — customer has paid</button>
+          <button onClick={() => onChoose("Due", false)} className="w-full rounded-full bg-amber-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Due — payment pending</button>
+          <button onClick={() => onChoose("Paid", true)} className="w-full rounded-full bg-blue-600 py-3 text-sm font-bold text-white active:scale-[0.98]">Advance Booking — paid now, collected in batches</button>
           <button onClick={onCancel} className="w-full rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-500">Back to editing</button>
         </div>
       </div>
@@ -590,7 +600,7 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
                   <label className="mb-1 block text-xs font-semibold text-slate-500">Destination</label>
                   <input list="destination-names" value={destination} onChange={(e) => { setDestination(e.target.value); setDestinationTouched(true); }} placeholder="Place / area" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                   <datalist id="destination-names">{knownDestinations.map((n) => <option key={n} value={n} />)}</datalist>
-                  <p className="mt-1 text-[11px] text-slate-400">Auto-filled from the customer's saved location â€” edit if this delivery goes elsewhere.</p>
+                  <p className="mt-1 text-[11px] text-slate-400">Auto-filled from the customer's saved location — edit if this delivery goes elsewhere.</p>
                 </div>
               </div>
             )}
@@ -614,7 +624,7 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-amber-800">Previous due â€” {fmtMoney(previousDueAmount, "")}</p>
+                    <p className="text-sm font-semibold text-amber-800">Previous due — {fmtMoney(previousDueAmount, "")}</p>
                     <p className="mt-0.5 text-xs text-amber-700">From {previousDueEstimates.length} earlier unpaid estimate{previousDueEstimates.length !== 1 ? "s" : ""}: {previousDueEstimates.map((e: any) => e.number).join(", ")}</p>
                   </div>
                   <button type="button" onClick={() => setIncludePreviousDue((v) => !v)} className={`h-6 w-11 shrink-0 rounded-full p-0.5 transition ${includePreviousDue ? "bg-amber-500" : "bg-slate-200"}`}>
@@ -686,7 +696,7 @@ function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold text-slate-900">{doc.number}</h3>
-            <p className="text-xs text-slate-400">{fmtDate(doc.date)}{doc.dueDate ? ` Â· Due ${fmtDate(doc.dueDate)}` : ""}</p>
+            <p className="text-xs text-slate-400">{fmtDate(doc.date)}{doc.dueDate ? ` · Due ${fmtDate(doc.dueDate)}` : ""}</p>
           </div>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-100"><X size={18} /></button>
         </div>
@@ -716,7 +726,7 @@ function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
                   <div key={i} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2 text-sm">
                     <div>
                       <p className="font-semibold text-slate-800">{it?.name || ln.name || "Item"}</p>
-                      <p className="text-xs text-slate-400">{ln.qty} Ã— {fmtMoney(ln.rate, currency)}</p>
+                      <p className="text-xs text-slate-400">{ln.qty} × {fmtMoney(ln.rate, currency)}</p>
                     </div>
                     <p className="font-semibold text-slate-800">{fmtMoney(Number(ln.qty || 0) * Number(ln.rate || 0), currency)}</p>
                   </div>
@@ -753,7 +763,7 @@ function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
               <div className="space-y-1.5">
                 {doc.returns.map((r: any, i: number) => (
                   <div key={i} className="flex items-center justify-between rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                    <span>{r.name} Ã— {r.qty} ({fmtDate(r.date)})</span>
+                    <span>{r.name} × {r.qty} ({fmtDate(r.date)})</span>
                     <span className="font-semibold">-{fmtMoney(r.amount, currency)}</span>
                   </div>
                 ))}
@@ -767,7 +777,7 @@ function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
               <div className="space-y-1.5">
                 {doc.deliveries.map((d: any, i: number) => (
                   <div key={i} className="flex items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                    <span>{d.name} Ã— {d.qty}</span>
+                    <span>{d.name} × {d.qty}</span>
                     <span className="text-blue-500">{fmtDate(d.date)}</span>
                   </div>
                 ))}
@@ -781,7 +791,7 @@ function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
                 {[...doc.history].reverse().map((h: any, i: number) => (
                   <div key={i} className="text-xs">
                     <p className="font-semibold text-slate-700">{h.action}</p>
-                    <p className="text-slate-400">{fmtDate(h.date)}{h.note ? ` Â· ${h.note}` : ""}</p>
+                    <p className="text-slate-400">{fmtDate(h.date)}{h.note ? ` · ${h.note}` : ""}</p>
                   </div>
                 ))}
               </div>
@@ -806,18 +816,18 @@ function RateEditPopup({ itemName, listPrice, rate, onCancel, onReset, onSave }:
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/40 p-4">
       <div className="w-full sm:max-w-xs rounded-3xl bg-white p-5 shadow-xl">
         <h3 className="text-base font-bold text-slate-900">Edit rate</h3>
-        <p className="mb-4 mt-0.5 text-xs text-slate-500">{itemName} â€” this estimate only</p>
+        <p className="mb-4 mt-0.5 text-xs text-slate-500">{itemName} — this estimate only</p>
 
         <label className="mb-1.5 block text-xs font-semibold text-slate-500">Rate per unit</label>
         <div className="flex items-center rounded-xl border-[1.5px] border-blue-600 px-3 py-2.5">
-          <span className="mr-1 text-slate-500">â‚¹</span>
+          <span className="mr-1 text-slate-500">₹</span>
           <input
             type="number" min="0" autoFocus value={value}
             onChange={(e) => setValue(e.target.value)}
             className="w-full border-none p-0 text-base font-bold text-slate-900 outline-none"
           />
         </div>
-        <p className="mb-4 mt-1.5 text-xs text-slate-400">Item's list price: â‚¹{Number(listPrice).toFixed(2)}</p>
+        <p className="mb-4 mt-1.5 text-xs text-slate-400">Item's list price: ₹{Number(listPrice).toFixed(2)}</p>
 
         <p className="mb-4 text-[11px] leading-relaxed text-slate-400">
           This only changes the rate on this estimate. Your saved item price in the Items list won't be affected.
@@ -829,7 +839,7 @@ function RateEditPopup({ itemName, listPrice, rate, onCancel, onReset, onSave }:
         </div>
         {isOverridden && (
           <button onClick={onReset} className="mt-3 text-left text-xs font-semibold text-blue-600 underline">
-            â†º Reset to list price (â‚¹{Number(listPrice).toFixed(2)})
+            ↺ Reset to list price (₹{Number(listPrice).toFixed(2)})
           </button>
         )}
       </div>
@@ -881,7 +891,7 @@ function ChallanModal({ onClose, onSave }: any) {
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className={labelCls}>Route *</label>
-            <input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="e.g. Mumbai â†’ Pune" className={inputCls} />
+            <input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="e.g. Mumbai → Pune" className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>From date</label>
@@ -922,7 +932,7 @@ function ChallanModal({ onClose, onSave }: any) {
               </div>
             ))}
           </div>
-          {totalExpenses > 0 && <p className="mt-1 text-right text-xs text-slate-400">Total: <span className="font-semibold text-rose-600">â‚¹{totalExpenses.toFixed(2)}</span></p>}
+          {totalExpenses > 0 && <p className="mt-1 text-right text-xs text-slate-400">Total: <span className="font-semibold text-rose-600">₹{totalExpenses.toFixed(2)}</span></p>}
         </div>
 
         {/* Income Types */}
@@ -942,7 +952,7 @@ function ChallanModal({ onClose, onSave }: any) {
               </div>
             ))}
           </div>
-          {totalIncomes > 0 && <p className="mt-1 text-right text-xs text-slate-400">Total: <span className="font-semibold text-emerald-600">â‚¹{totalIncomes.toFixed(2)}</span></p>}
+          {totalIncomes > 0 && <p className="mt-1 text-right text-xs text-slate-400">Total: <span className="font-semibold text-emerald-600">₹{totalIncomes.toFixed(2)}</span></p>}
         </div>
 
         {/* Delivery Fee */}
@@ -1055,7 +1065,7 @@ function ReturnModal({ doc, items, currency, onClose, onSave }: any) {
           <h3 className="text-lg font-bold text-slate-900">Return items</h3>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-100"><X size={18} /></button>
         </div>
-        <p className="mb-4 text-xs text-slate-500">{doc.number} â€” enter how many of each item are being returned.</p>
+        <p className="mb-4 text-xs text-slate-500">{doc.number} — enter how many of each item are being returned.</p>
 
         {returnableLines.length === 0 ? (
           <p className="text-sm text-slate-500">Every item on this estimate has already been returned.</p>
@@ -1066,8 +1076,8 @@ function ReturnModal({ doc, items, currency, onClose, onSave }: any) {
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{l.name}</p>
                   <p className="text-xs text-slate-400">
-                    {l.qty - l.returned} available to return Â· {fmtMoney(l.rate, currency)} each
-                    {l.returned > 0 ? ` Â· ${l.returned} already returned` : ""}
+                    {l.qty - l.returned} available to return · {fmtMoney(l.rate, currency)} each
+                    {l.returned > 0 ? ` · ${l.returned} already returned` : ""}
                   </p>
                 </div>
                 <input
@@ -1124,7 +1134,7 @@ function DeliveryModal({ doc, items, onClose, onSave }: any) {
           <h3 className="text-lg font-bold text-slate-900">Record collection</h3>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-100"><X size={18} /></button>
         </div>
-        <p className="mb-4 text-xs text-slate-500">{doc.number} â€” enter how many of each booked item the customer is taking right now. Can't exceed what's still remaining.</p>
+        <p className="mb-4 text-xs text-slate-500">{doc.number} — enter how many of each booked item the customer is taking right now. Can't exceed what's still remaining.</p>
 
         {rows.length === 0 ? (
           <p className="text-sm text-slate-500">Everything booked on this estimate has already been collected.</p>
@@ -1136,7 +1146,7 @@ function DeliveryModal({ doc, items, onClose, onSave }: any) {
                   <p className="text-sm font-semibold text-slate-800">{r.name}</p>
                   <p className="text-xs text-slate-400">
                     {r.remaining} of {r.booked} remaining
-                    {r.delivered > 0 ? ` Â· ${r.delivered} collected so far` : ""}
+                    {r.delivered > 0 ? ` · ${r.delivered} collected so far` : ""}
                   </p>
                 </div>
                 <input
@@ -1210,7 +1220,7 @@ function InvoiceShareModal({ invoice, customer, items, settings, payment, onClos
       const name = it?.name || "Item"; const qty = Number(ln.qty || 0); const price = ln.rate ?? it?.price ?? 0; const amount = qty * price;
       y += rowH; ctx.strokeStyle = "#f1f5f9"; ctx.beginPath(); ctx.moveTo(60, y - rowH + 8); ctx.lineTo(W - 60, y - rowH + 8); ctx.stroke();
       ctx.fillStyle = "#0f172a";
-      ctx.fillText(name.length > 28 ? name.slice(0, 27) + "â€¦" : name, 76, y - 8);
+      ctx.fillText(name.length > 28 ? name.slice(0, 27) + "…" : name, 76, y - 8);
       ctx.fillText(String(qty), W - 330, y - 8); ctx.fillText(fmtMoney(price, settings.currency), W - 230, y - 8); ctx.fillText(fmtMoney(amount, settings.currency), W - 120, y - 8);
     });
     y += 50; ctx.strokeStyle = "#e2e8f0"; ctx.beginPath(); ctx.moveTo(60, y); ctx.lineTo(W - 60, y); ctx.stroke(); y += 40;
@@ -1228,23 +1238,23 @@ function InvoiceShareModal({ invoice, customer, items, settings, payment, onClos
     y += 50;
     if (invoice.status === "Paid") {
       ctx.fillStyle = "#ecfdf5"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#10b981"; ctx.font = "bold 16px Arial";
-      ctx.fillText(`âœ“ Payment received${payment ? " on " + fmtDate(payment.date) : ""}`, 80, y + 32);
+      ctx.fillText(`✓ Payment received${payment ? " on " + fmtDate(payment.date) : ""}`, 80, y + 32);
     } else if (invoice.status === "Partially Paid") {
       const remaining = Number(invoice.total || 0) - Number(invoice.amountPaid || 0);
       ctx.fillStyle = "#eff6ff"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#0284c7"; ctx.font = "bold 16px Arial";
-      ctx.fillText(`Partially paid â€” ${fmtMoney(remaining, settings.currency)} still due`, 80, y + 32);
+      ctx.fillText(`Partially paid — ${fmtMoney(remaining, settings.currency)} still due`, 80, y + 32);
     } else if (invoice.status === "Accepted") {
       ctx.fillStyle = "#eff6ff"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#2563eb"; ctx.font = "bold 16px Arial";
-      ctx.fillText(`Accepted â€” payment due by ${fmtDate(invoice.dueDate)}`, 80, y + 32);
+      ctx.fillText(`Accepted — payment due by ${fmtDate(invoice.dueDate)}`, 80, y + 32);
     } else {
       ctx.fillStyle = isOverdue ? "#fff1f2" : "#fffbeb"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = isOverdue ? "#e11d48" : "#d97706"; ctx.font = "bold 16px Arial";
-      ctx.fillText(isOverdue ? `Overdue â€” was due ${fmtDate(invoice.dueDate)}` : `Payment due by ${fmtDate(invoice.dueDate)}`, 80, y + 32);
+      ctx.fillText(isOverdue ? `Overdue — was due ${fmtDate(invoice.dueDate)}` : `Payment due by ${fmtDate(invoice.dueDate)}`, 80, y + 32);
     }
     ctx.save(); ctx.translate(W - 160, 150); ctx.rotate(-0.28); ctx.globalAlpha = 0.9; ctx.font = "bold 32px Arial"; ctx.textAlign = "center";
     const textW = ctx.measureText(statusLabel).width; ctx.lineWidth = 4; ctx.strokeStyle = statusColor;
     ctx.strokeRect(-textW / 2 - 24, -26, textW + 48, 52); ctx.fillStyle = statusColor; ctx.fillText(statusLabel, 0, 10); ctx.restore();
     ctx.textAlign = "center"; ctx.font = "13px Arial"; ctx.fillStyle = "#94a3b8";
-    ctx.fillText(`Thank you for your business â€” ${settings.orgName || ""}`, W / 2, H - 28); ctx.textAlign = "left";
+    ctx.fillText(`Thank you for your business — ${settings.orgName || ""}`, W / 2, H - 28); ctx.textAlign = "left";
     setImgUrl(canvas.toDataURL("image/png"));
   }, [invoice, customer, items, settings, payment, isOverdue, statusLabel, statusColor]);
 
@@ -1269,9 +1279,9 @@ function InvoiceShareModal({ invoice, customer, items, settings, payment, onClos
         </div>
         <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
           {imgUrl ? <img src={imgUrl} alt={`Estimate ${invoice.number}`} className="block h-auto w-full" />
-            : <div className="flex h-40 items-center justify-center text-sm text-slate-400">Generating previewâ€¦</div>}
+            : <div className="flex h-40 items-center justify-center text-sm text-slate-400">Generating preview…</div>}
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-slate-400">Press and hold the image to save it, then share from your gallery â€” or use the buttons below.</p>
+        <p className="mt-3 text-xs leading-relaxed text-slate-400">Press and hold the image to save it, then share from your gallery — or use the buttons below.</p>
         <div className="mt-4 grid grid-cols-1 gap-2">
           <a href={imgUrl || undefined} download={`${invoice.number}.png`} onClick={(e) => { if (!imgUrl) e.preventDefault(); }}
             className={`flex items-center justify-center gap-2 rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-700 transition active:scale-[0.98] ${!imgUrl ? "opacity-40" : ""}`}>
@@ -1458,7 +1468,7 @@ function GlobalSearchOverlay({ customers, items, estimates, currency, onSelectCu
                   return (
                     <button key={e.id} onClick={() => onSelectEstimate(e)} className="w-full flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-left">
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{e.number} Â· {cust?.name || "Unknown"}</p>
+                        <p className="text-sm font-semibold text-slate-800">{e.number} · {cust?.name || "Unknown"}</p>
                         <p className="text-xs text-slate-400">{fmtMoney(e.total, currency)}</p>
                       </div>
                       <Badge status={e.status} />
@@ -1499,7 +1509,7 @@ function Dashboard({ data, settings, openModal, go }: any) {
 
   const refundPayments = (payments || []).filter((p: any) => Number(p.amount) < 0);
   const returnsForList = refundPayments.map((p: any) => ({
-    id: p.id, number: `Refund â€” ${p.invoiceNumber || "â€”"}`, date: p.date, total: Math.abs(Number(p.amount)),
+    id: p.id, number: `Refund — ${p.invoiceNumber || "—"}`, date: p.date, total: Math.abs(Number(p.amount)),
   }));
   const recentMap: any = { estimates, expenses, returns: returnsForList };
   const recent = recentMap[tab].slice(0, 5);
@@ -1597,13 +1607,13 @@ function Dashboard({ data, settings, openModal, go }: any) {
           <div>
             <p className="text-xs font-semibold text-slate-400">Today</p>
             <p className="mt-1 text-lg font-bold text-slate-900">{fmtMoney(todaySales, settings.currency)}</p>
-            {refundsToday > 0 && <p className="text-xs font-semibold text-rose-500">âˆ’{fmtMoney(refundsToday, settings.currency)} refunded</p>}
+            {refundsToday > 0 && <p className="text-xs font-semibold text-rose-500">−{fmtMoney(refundsToday, settings.currency)} refunded</p>}
             <p className="text-xs font-semibold text-emerald-600">Net {fmtMoney(todaySales - refundsToday, settings.currency)}</p>
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-400">This month</p>
             <p className="mt-1 text-lg font-bold text-slate-900">{fmtMoney(monthSales, settings.currency)}</p>
-            {refundsMonth > 0 && <p className="text-xs font-semibold text-rose-500">âˆ’{fmtMoney(refundsMonth, settings.currency)} refunded</p>}
+            {refundsMonth > 0 && <p className="text-xs font-semibold text-rose-500">−{fmtMoney(refundsMonth, settings.currency)} refunded</p>}
             <p className="text-xs font-semibold text-emerald-600">Net {fmtMoney(monthSales - refundsMonth, settings.currency)}</p>
           </div>
         </div>
@@ -1697,7 +1707,7 @@ function CustomersView({ customers, openModal, removeCustomer, estimates, onSele
             <Card key={c.id} className="flex items-center justify-between cursor-pointer" onClick={() => onSelectCustomer(c.id)}>
               <div>
                 <p className="font-semibold text-slate-900">{c.name}</p>
-                <p className="text-xs text-slate-400">{c.email || "No email"}{c.phone ? ` Â· ${c.phone}` : ""}</p>
+                <p className="text-xs text-slate-400">{c.email || "No email"}{c.phone ? ` · ${c.phone}` : ""}</p>
                 {c.location && (
                   <a
                     href={c.lat && c.lng ? `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.location)}`}
@@ -1708,7 +1718,7 @@ function CustomersView({ customers, openModal, removeCustomer, estimates, onSele
                     <MapPin size={11} /> {c.location}
                   </a>
                 )}
-                {balance > 0 && <p className="mt-1 text-xs font-semibold text-rose-600">Due {fmtMoney(balance, "â‚¹")}</p>}
+                {balance > 0 && <p className="mt-1 text-xs font-semibold text-rose-600">Due {fmtMoney(balance, "₹")}</p>}
               </div>
               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 <WhatsAppButton phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
@@ -1753,7 +1763,7 @@ function CustomerDetailView({ customer, estimates, payments, currency, onBack }:
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-lg font-bold text-slate-900">{customer.name}</p>
-            <p className="text-xs text-slate-400">{customer.email || "No email"}{customer.phone ? ` Â· ${customer.phone}` : ""}</p>
+            <p className="text-xs text-slate-400">{customer.email || "No email"}{customer.phone ? ` · ${customer.phone}` : ""}</p>
             {customer.location && (
               <a
                 href={customer.lat && customer.lng ? `https://www.google.com/maps/search/?api=1&query=${customer.lat},${customer.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.location)}`}
@@ -1813,8 +1823,8 @@ function CustomerDetailView({ customer, estimates, payments, currency, onBack }:
             {custPayments.map((p: any) => (
               <Card key={p.id} className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold text-slate-800">{p.invoiceNumber || "â€”"}</p>
-                  <p className="text-xs text-slate-400">{fmtDate(p.date)}{p.method ? ` Â· ${p.method}` : ""}</p>
+                  <p className="font-semibold text-slate-800">{p.invoiceNumber || "—"}</p>
+                  <p className="text-xs text-slate-400">{fmtDate(p.date)}{p.method ? ` · ${p.method}` : ""}</p>
                 </div>
                 <p className={`font-bold ${Number(p.amount) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{fmtMoney(p.amount, currency)}</p>
               </Card>
@@ -1873,7 +1883,7 @@ function ItemsView({ items, openModal, removeItem, currency }: any) {
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">{it.category || "Others"}</span>
                   {isLow && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 flex items-center gap-1"><AlertTriangle size={10} /> Low stock</span>}
                 </div>
-                <p className="text-xs text-slate-400">{it.unit || "unit"} Â· Stock: <span className={`font-semibold ${isLow ? "text-amber-600" : "text-slate-700"}`}>{it.stock ?? 0}</span> (alert at â‰¤{threshold})</p>
+                <p className="text-xs text-slate-400">{it.unit || "unit"} · Stock: <span className={`font-semibold ${isLow ? "text-amber-600" : "text-slate-700"}`}>{it.stock ?? 0}</span> (alert at ≤{threshold})</p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
@@ -1927,7 +1937,7 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
                     <div className="flex items-start justify-between">
                       <div>
                         <p className="font-semibold text-slate-900">{itemName(o.itemId)}</p>
-                        <p className="text-xs text-slate-400">Qty: {o.qty} Â· {fmtDate(o.date)}{o.notes ? ` Â· ${o.notes}` : ""}</p>
+                        <p className="text-xs text-slate-400">Qty: {o.qty} · {fmtDate(o.date)}{o.notes ? ` · ${o.notes}` : ""}</p>
                       </div>
                       <Badge status="Pending" />
                     </div>
@@ -1949,7 +1959,7 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
                   <Card key={o.id} className="mb-2 flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-slate-900">{itemName(o.itemId)}</p>
-                      <p className="text-xs text-slate-400">Qty: {o.qty} Â· {fmtDate(o.date)}{o.notes ? ` Â· ${o.notes}` : ""}</p>
+                      <p className="text-xs text-slate-400">Qty: {o.qty} · {fmtDate(o.date)}{o.notes ? ` · ${o.notes}` : ""}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge status="Received" />
@@ -2026,8 +2036,8 @@ function DocumentList({ type, docs, customers, items, currency, openModal, remov
         <Card key={d.id}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="font-semibold text-slate-900">{d.number} Â· {d.route || "â€“"}</p>
-              <p className="text-xs text-slate-400">{fmtDate(d.fromDate)} â†’ {fmtDate(d.toDate)}</p>
+              <p className="font-semibold text-slate-900">{d.number} · {d.route || "–"}</p>
+              <p className="text-xs text-slate-400">{fmtDate(d.fromDate)} → {fmtDate(d.toDate)}</p>
             </div>
             <Badge status={d.status} />
           </div>
@@ -2065,7 +2075,7 @@ function DocumentList({ type, docs, customers, items, currency, openModal, remov
         <div className="flex items-start justify-between">
           <div>
             <p className="font-semibold text-slate-900">{d.number}</p>
-            <p className="text-xs text-slate-400">{customerName(d.customerId)} Â· {fmtDate(d.date)}</p>
+            <p className="text-xs text-slate-400">{customerName(d.customerId)} · {fmtDate(d.date)}</p>
           </div>
           <div className="flex flex-col items-end gap-1">
             <Badge status={displayStatus} />
@@ -2078,10 +2088,10 @@ function DocumentList({ type, docs, customers, items, currency, openModal, remov
         {type === "estimate" && d.status !== "Due" && Number(d.amountPaid || 0) > 0 && (
           <p className="mt-0.5 text-xs text-slate-500">
             Paid {fmtMoney(d.amountPaid, currency)}
-            {d.status !== "Paid" && <span className="text-amber-600 font-semibold"> Â· {fmtMoney(Number(d.total || 0) - Number(d.amountPaid || 0), currency)} due</span>}
+            {d.status !== "Paid" && <span className="text-amber-600 font-semibold"> · {fmtMoney(Number(d.total || 0) - Number(d.amountPaid || 0), currency)} due</span>}
           </p>
         )}
-        {type === "estimate" && d.notes && <p className="mt-1 text-xs text-slate-400 line-clamp-2">ðŸ“ {d.notes}</p>}
+        {type === "estimate" && d.notes && <p className="mt-1 text-xs text-slate-400 line-clamp-2">📝 {d.notes}</p>}
         {type === "estimate" && d.isAdvanceBooking && (() => {
           const rows = bookingLineProgress(d);
           const pending = rows.filter((r: any) => r.remaining > 0);
@@ -2089,7 +2099,7 @@ function DocumentList({ type, docs, customers, items, currency, openModal, remov
           const itemName = (id: string) => items?.find?.((it: any) => it.id === id)?.name;
           return (
             <div className="mt-2 rounded-xl bg-blue-50 px-3 py-2">
-              <p className="text-xs font-semibold text-blue-700 mb-1">{pending.length > 0 ? "Advance booking â€” collection pending" : "Advance booking â€” fully collected"}</p>
+              <p className="text-xs font-semibold text-blue-700 mb-1">{pending.length > 0 ? "Advance booking — collection pending" : "Advance booking — fully collected"}</p>
               {pending.length > 0 && (
                 <div className="space-y-0.5">
                   {pending.map((r: any) => (
@@ -2216,14 +2226,14 @@ function PaymentsView({ payments, customers, currency, openModal, removePayment 
             <div>
               <p className="font-semibold text-slate-900">{customerName(p.customerId)}</p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-slate-400">{fmtDate(p.date)}{p.method ? ` Â· ${p.method}` : ""}</span>
+                <span className="text-xs text-slate-400">{fmtDate(p.date)}{p.method ? ` · ${p.method}` : ""}</span>
                 {p.invoiceNumber
                   ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">{p.invoiceNumber}</span>
                   : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-400">No estimate linked</span>}
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`font-bold ${Number(p.amount) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{Number(p.amount) < 0 ? "âˆ’" : "+"}{fmtMoney(Math.abs(p.amount), currency)}</span>
+              <span className={`font-bold ${Number(p.amount) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{Number(p.amount) < 0 ? "−" : "+"}{fmtMoney(Math.abs(p.amount), currency)}</span>
               <button onClick={() => removePayment(p.id)} className="rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={16} /></button>
             </div>
           </Card>
@@ -2246,7 +2256,7 @@ function ExpensesView({ expenses, currency, openModal, removeExpense }: any) {
         ? <Card><EmptyState text="Record your expenses." cta="Record Expense" onCta={() => openModal("expense")} /></Card>
         : expenses.map((e: any) => (
           <Card key={e.id} className="flex items-center justify-between">
-            <div><p className="font-semibold text-slate-900">{e.category}</p><p className="text-xs text-slate-400">{e.vendor || "No vendor"} Â· {fmtDate(e.date)}</p></div>
+            <div><p className="font-semibold text-slate-900">{e.category}</p><p className="text-xs text-slate-400">{e.vendor || "No vendor"} · {fmtDate(e.date)}</p></div>
             <div className="flex items-center gap-3">
               <span className="font-bold text-rose-600">-{fmtMoney(e.amount, currency)}</span>
               <button onClick={() => removeExpense(e.id)} className="rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={16} /></button>
@@ -2296,7 +2306,7 @@ function ContractorScorecardView({ estimates, items, currency }: any) {
             <button className="flex w-full items-center justify-between text-left" onClick={() => setOpenContractor(isOpen ? null : name)}>
               <div>
                 <p className="text-sm font-bold text-slate-900">{name}</p>
-                <p className="mt-0.5 text-xs text-slate-400">{c.count} estimate{c.count !== 1 ? "s" : ""} Â· {fmtMoney(c.total, currency)}</p>
+                <p className="mt-0.5 text-xs text-slate-400">{c.count} estimate{c.count !== 1 ? "s" : ""} · {fmtMoney(c.total, currency)}</p>
               </div>
               {isOpen ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
             </button>
@@ -2381,7 +2391,7 @@ function LabourTrackingView({ sessions, knownWorkers, onSave, onRemove, currency
 
         <label className="mb-1 block text-xs font-semibold text-slate-500">Number of workers</label>
         <div className="mb-3 flex items-center gap-3">
-          <button onClick={() => setWorkerCountSafe(workerCount - 1)} className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 text-lg font-bold text-slate-600">âˆ’</button>
+          <button onClick={() => setWorkerCountSafe(workerCount - 1)} className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 text-lg font-bold text-slate-600">−</button>
           <span className="w-6 text-center text-base font-bold text-slate-900">{workerCount}</span>
           <button onClick={() => setWorkerCountSafe(workerCount + 1)} className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 text-lg font-bold text-slate-600">+</button>
         </div>
@@ -2399,19 +2409,19 @@ function LabourTrackingView({ sessions, knownWorkers, onSave, onRemove, currency
         <label className="mb-2 block text-xs font-semibold text-slate-500">Materials moved (shared by the group)</label>
         <div className="mb-2 flex items-center gap-2">
           <span className="w-16 text-sm font-semibold text-slate-700">Cement</span>
-          <span className="w-16 text-xs text-slate-400">â‚¹{LABOUR_RATES.cement}/unit</span>
+          <span className="w-16 text-xs text-slate-400">₹{LABOUR_RATES.cement}/unit</span>
           <input type="number" min="0" value={cementQty} onChange={(e) => setCementQty(e.target.value)} className="w-20 rounded-xl border border-slate-200 px-2 py-2 text-center text-sm" />
           <span className="ml-auto text-sm font-bold text-blue-600">{fmtMoney(cementAmt, currency)}</span>
         </div>
         <div className="mb-2 flex items-center gap-2">
           <span className="w-16 text-sm font-semibold text-slate-700">Saria</span>
-          <span className="w-16 text-xs text-slate-400">â‚¹{LABOUR_RATES.saria}/unit</span>
+          <span className="w-16 text-xs text-slate-400">₹{LABOUR_RATES.saria}/unit</span>
           <input type="number" min="0" value={sariaQty} onChange={(e) => setSariaQty(e.target.value)} className="w-20 rounded-xl border border-slate-200 px-2 py-2 text-center text-sm" />
           <span className="ml-auto text-sm font-bold text-blue-600">{fmtMoney(sariaAmt, currency)}</span>
         </div>
         <div className="mb-3 flex items-center gap-2">
           <span className="w-16 text-sm font-semibold text-slate-700">Balu</span>
-          <span className="w-16 text-xs text-slate-400">â‚¹{LABOUR_RATES.balu}/unit</span>
+          <span className="w-16 text-xs text-slate-400">₹{LABOUR_RATES.balu}/unit</span>
           <input type="number" min="0" value={baluQty} onChange={(e) => setBaluQty(e.target.value)} className="w-20 rounded-xl border border-slate-200 px-2 py-2 text-center text-sm" />
           <span className="ml-auto text-sm font-bold text-blue-600">{fmtMoney(baluAmt, currency)}</span>
         </div>
@@ -2426,7 +2436,7 @@ function LabourTrackingView({ sessions, knownWorkers, onSave, onRemove, currency
           <div className="mb-3 flex items-center gap-2">
             <span className="w-16 text-sm font-semibold text-slate-700">Other</span>
             <span className="w-16 text-xs text-slate-400">your rate</span>
-            <input type="number" min="0" value={otherAmount} onChange={(e) => setOtherAmount(e.target.value)} placeholder="â‚¹" className="w-20 rounded-xl border border-slate-200 px-2 py-2 text-center text-sm" />
+            <input type="number" min="0" value={otherAmount} onChange={(e) => setOtherAmount(e.target.value)} placeholder="₹" className="w-20 rounded-xl border border-slate-200 px-2 py-2 text-center text-sm" />
             <span className="ml-auto text-sm font-bold text-blue-600">{fmtMoney(otherAmt, currency)}</span>
           </div>
         )}
@@ -2436,7 +2446,7 @@ function LabourTrackingView({ sessions, knownWorkers, onSave, onRemove, currency
           <span className="text-lg font-bold text-blue-700">{fmtMoney(sessionTotal, currency)}</span>
         </div>
         <button disabled={!canSave || saving} onClick={save} className="mt-3 w-full rounded-full bg-slate-900 py-3 text-sm font-semibold text-white disabled:opacity-40">
-          {saving ? "Savingâ€¦" : "+ Save session"}
+          {saving ? "Saving…" : "+ Save session"}
         </button>
       </Card>
 
@@ -2454,7 +2464,7 @@ function LabourTrackingView({ sessions, knownWorkers, onSave, onRemove, currency
                 <div className="flex gap-3">
                   <span className="w-16 shrink-0 text-xs font-bold text-slate-400">{new Date(s.time).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</span>
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{(s.workers || []).join(", ") || "â€”"}</p>
+                    <p className="text-sm font-semibold text-slate-800">{(s.workers || []).join(", ") || "—"}</p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {s.cementQty > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">Cement {fmtMoney(s.cementQty * LABOUR_RATES.cement, currency)}</span>}
                       {s.sariaQty > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">Saria {fmtMoney(s.sariaQty * LABOUR_RATES.saria, currency)}</span>}
@@ -2530,8 +2540,8 @@ function ToDoTrackingView({ items, settings, openModal }: any) {
       th, td { text-align: left; padding: 4px 6px; border-bottom: 0.2mm solid #e2e8f0; font-size: 11px; }
       th { color: #64748b; font-weight: 600; }
     </style></head><body>
-      <h1>${settings?.orgName || "Business"} â€” Inventory</h1>
-      <table><thead><tr><th>Item</th><th>Unit</th><th style="text-align:right;">In stock</th><th style="text-align:right;">Alert â‰¤</th></tr></thead>
+      <h1>${settings?.orgName || "Business"} — Inventory</h1>
+      <table><thead><tr><th>Item</th><th>Unit</th><th style="text-align:right;">In stock</th><th style="text-align:right;">Alert ≤</th></tr></thead>
       <tbody>${rowsHtml}</tbody></table>
     </body></html>`);
     w.document.close();
@@ -2561,7 +2571,7 @@ function ToDoTrackingView({ items, settings, openModal }: any) {
               <li key={it.id} className="flex items-center justify-between rounded-xl bg-amber-50 px-4 py-3">
                 <div>
                   <p className="font-semibold text-slate-900">{it.name}</p>
-                  <p className="text-xs text-slate-500">{it.unit || "unit"} Â· Alert threshold: {it.lowStock ?? LOW_STOCK_DEFAULT}</p>
+                  <p className="text-xs text-slate-500">{it.unit || "unit"} · Alert threshold: {it.lowStock ?? LOW_STOCK_DEFAULT}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-right">
@@ -2576,7 +2586,7 @@ function ToDoTrackingView({ items, settings, openModal }: any) {
         )}
       </Card>
 
-      {/* Full inventory â€” collapsible */}
+      {/* Full inventory — collapsible */}
       <Card>
         <button
           onClick={() => setInventoryOpen((v) => !v)}
@@ -2610,12 +2620,12 @@ function ToDoTrackingView({ items, settings, openModal }: any) {
                   <li key={it.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-2.5">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{it.name}</p>
-                      <p className="text-xs text-slate-400">{it.unit || "unit"} Â· {it.category || "Others"}</p>
+                      <p className="text-xs text-slate-400">{it.unit || "unit"} · {it.category || "Others"}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="text-right">
                         <p className={`text-base font-bold ${stockColor(it)}`}>{it.stock ?? 0}</p>
-                        <p className="text-xs text-slate-400">/ alert â‰¤{it.lowStock ?? LOW_STOCK_DEFAULT}</p>
+                        <p className="text-xs text-slate-400">/ alert ≤{it.lowStock ?? LOW_STOCK_DEFAULT}</p>
                       </div>
                       <button onClick={() => openModal("item", { editingItem: it })} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><Pencil size={15} /></button>
                     </div>
@@ -2730,7 +2740,7 @@ function ReportsView({ data, currency, settings }: any) {
   const statusCounts: Record<string, number> = {};
   invoices.forEach((i: any) => { statusCounts[i.status] = (statusCounts[i.status] || 0) + 1; });
 
-  // Real gross margin: revenue minus cost-of-goods-sold, using each item's purchasePrice â€”
+  // Real gross margin: revenue minus cost-of-goods-sold, using each item's purchasePrice —
   // distinct from "netProfit" below, which is just cash collected minus overhead expenses
   // and says nothing about what the goods actually cost to buy.
   const itemById = (id: string) => items.find((it: any) => it.id === id);
@@ -2801,7 +2811,7 @@ function ReportsView({ data, currency, settings }: any) {
       th, td { text-align: left; padding: 4px 6px; border-bottom: 0.2mm solid #e2e8f0; font-size: 11px; }
       th { color: #64748b; font-weight: 600; }
     </style></head><body>
-      <h1>${settings?.orgName || "Business"} â€” Report</h1>
+      <h1>${settings?.orgName || "Business"} — Report</h1>
       <div class="sub">${fmtDate(fromDate)} to ${fmtDate(toDate)}</div>
       <div class="stats">
         <div class="stat">Invoiced<b>${fmtMoney(rInvoiced, currency)}</b></div>
@@ -2839,10 +2849,10 @@ function ReportsView({ data, currency, settings }: any) {
       </div>
 
       <Card className="border border-emerald-100 bg-emerald-50/40">
-        <p className="text-xs font-semibold text-emerald-700">Gross Profit (revenue âˆ’ cost of goods sold)</p>
+        <p className="text-xs font-semibold text-emerald-700">Gross Profit (revenue − cost of goods sold)</p>
         <p className="mt-1 text-2xl font-bold text-emerald-700">{fmtMoney(grossProfit, currency)}</p>
-        <p className="mt-1 text-xs text-emerald-600">{grossMarginPercent.toFixed(1)}% margin Â· Cost of goods sold: {fmtMoney(costOfGoodsSold, currency)}</p>
-        <p className="mt-2 text-xs text-slate-400">This is different from "Total Received âˆ’ Total Expenses" â€” it accounts for what your items actually cost to buy, not just cash overhead.</p>
+        <p className="mt-1 text-xs text-emerald-600">{grossMarginPercent.toFixed(1)}% margin · Cost of goods sold: {fmtMoney(costOfGoodsSold, currency)}</p>
+        <p className="mt-2 text-xs text-slate-400">This is different from "Total Received − Total Expenses" — it accounts for what your items actually cost to buy, not just cash overhead.</p>
       </Card>
 
       {itemProfitability.length > 0 && (
@@ -2853,7 +2863,7 @@ function ReportsView({ data, currency, settings }: any) {
               <div key={it.itemId} className="flex items-center justify-between border-b border-slate-50 pb-2 last:border-0 last:pb-0">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{it.name}</p>
-                  <p className="text-xs text-slate-400">{it.qtySold} sold Â· Revenue {fmtMoney(it.revenue, currency)}</p>
+                  <p className="text-xs text-slate-400">{it.qtySold} sold · Revenue {fmtMoney(it.revenue, currency)}</p>
                 </div>
                 <p className={`text-sm font-bold ${it.margin >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{fmtMoney(it.margin, currency)}</p>
               </div>
@@ -2884,7 +2894,7 @@ function ReportsView({ data, currency, settings }: any) {
               : <ul className="divide-y divide-slate-100">
                 {nameMatchedInvoices.map((inv: any) => {
                   const c = customers.find((cu: any) => cu.id === inv.customerId);
-                  return (<li key={inv.id} className="py-3"><div className="flex items-start justify-between"><div><p className="font-semibold text-slate-900">{inv.number}</p><p className="text-xs text-slate-500">{c?.name} Â· {fmtDate(inv.date)}</p>{c?.location && <p className="flex items-center gap-1 text-xs text-slate-400"><MapPin size={10} /> {c.location}</p>}</div><div className="text-right"><p className="font-bold text-slate-800">{fmtMoney(inv.total, currency)}</p><Badge status={inv.status} /></div></div></li>);
+                  return (<li key={inv.id} className="py-3"><div className="flex items-start justify-between"><div><p className="font-semibold text-slate-900">{inv.number}</p><p className="text-xs text-slate-500">{c?.name} · {fmtDate(inv.date)}</p>{c?.location && <p className="flex items-center gap-1 text-xs text-slate-400"><MapPin size={10} /> {c.location}</p>}</div><div className="text-right"><p className="font-bold text-slate-800">{fmtMoney(inv.total, currency)}</p><Badge status={inv.status} /></div></div></li>);
                 })}
               </ul>
             }
@@ -2913,7 +2923,7 @@ function ReportsView({ data, currency, settings }: any) {
                         <div><p className="font-semibold text-slate-900">{c.name}</p><p className="flex items-center gap-1 text-xs text-slate-400 mt-0.5"><MapPin size={10} /> {c.location}</p>{c.phone && <p className="text-xs text-slate-400">{c.phone}</p>}</div>
                         <div className="text-right"><p className="text-xs text-slate-400">{custInvoices.length} estimate{custInvoices.length !== 1 ? "s" : ""}</p><p className="font-bold text-slate-800">{fmtMoney(custTotal, currency)}</p></div>
                       </div>
-                      {custInvoices.length > 0 && <ul className="mt-2 space-y-1 pl-2 border-l-2 border-slate-100">{custInvoices.map((inv: any) => (<li key={inv.id} className="flex items-center justify-between text-xs text-slate-500"><span>{inv.number} Â· {fmtDate(inv.date)}</span><span className="flex items-center gap-2">{fmtMoney(inv.total, currency)}<Badge status={inv.status} /></span></li>))}</ul>}
+                      {custInvoices.length > 0 && <ul className="mt-2 space-y-1 pl-2 border-l-2 border-slate-100">{custInvoices.map((inv: any) => (<li key={inv.id} className="flex items-center justify-between text-xs text-slate-500"><span>{inv.number} · {fmtDate(inv.date)}</span><span className="flex items-center gap-2">{fmtMoney(inv.total, currency)}<Badge status={inv.status} /></span></li>))}</ul>}
                     </li>
                   );
                 })}
@@ -2952,14 +2962,14 @@ function ShareReportView({ invoices, items, customers, currency, settings }: any
 
   const buildReport = () => {
     const lines = [
-      `ðŸ“Š *Daily Sales Report â€” ${fmtDate(todayStr)}*`,
-      `ðŸ¢ ${settings.orgName}`,
+      `📊 *Daily Sales Report — ${fmtDate(todayStr)}*`,
+      `🏢 ${settings.orgName}`,
       ``,
-      `ðŸ“¦ *Items Sold Today:*`,
-      ...rows.map((r) => `  â€¢ ${r.name}: ${r.qty} unit(s) â€” ${currency}${r.amount.toFixed(2)}`),
+      `📦 *Items Sold Today:*`,
+      ...rows.map((r) => `  • ${r.name}: ${r.qty} unit(s) — ${currency}${r.amount.toFixed(2)}`),
       ``,
-      `ðŸ§¾ Estimates raised: ${totalInvoices}`,
-      `ðŸ’° *Total Sales: ${currency}${totalSales.toFixed(2)}*`,
+      `🧾 Estimates raised: ${totalInvoices}`,
+      `💰 *Total Sales: ${currency}${totalSales.toFixed(2)}*`,
     ];
     return lines.join("\n");
   };
@@ -3060,7 +3070,7 @@ function AdvancedBillingView({ autoReminder, setAutoReminder, overdueCount, sett
             <span className={`block h-6 w-6 rounded-full bg-white transition ${autoReminder ? "translate-x-5" : "translate-x-0"}`} />
           </button>
         </div>
-        {autoReminder && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">Enabled â€” {overdueCount} overdue estimate{overdueCount !== 1 ? "s" : ""} will be flagged.</p>}
+        {autoReminder && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">Enabled — {overdueCount} overdue estimate{overdueCount !== 1 ? "s" : ""} will be flagged.</p>}
       </Card>
       <Card>
         <h3 className="text-base font-bold text-slate-900">Recurring estimates</h3>
@@ -3069,7 +3079,7 @@ function AdvancedBillingView({ autoReminder, setAutoReminder, overdueCount, sett
       </Card>
       <Card>
         <h3 className="text-base font-bold text-slate-900">Business WhatsApp number</h3>
-        <p className="mt-1 text-sm text-slate-400">{settings.businessWhatsApp ? `Connected: ${settings.businessWhatsApp}` : "Not set â€” add one in Settings."}</p>
+        <p className="mt-1 text-sm text-slate-400">{settings.businessWhatsApp ? `Connected: ${settings.businessWhatsApp}` : "Not set — add one in Settings."}</p>
       </Card>
     </div>
   );
@@ -3130,7 +3140,7 @@ function ChangePinCard() {
       {mode === "current" && (
         <div className="space-y-2">
           <label className="block text-xs font-semibold text-slate-500">Enter current PIN</label>
-          <input type="password" inputMode="numeric" maxLength={MAX} value={cur} onChange={(e) => setCur(numOnly(e.target.value))} placeholder="â€¢â€¢â€¢â€¢" className={inputCls} />
+          <input type="password" inputMode="numeric" maxLength={MAX} value={cur} onChange={(e) => setCur(numOnly(e.target.value))} placeholder="••••" className={inputCls} />
           <div className="flex gap-2">
             <button onClick={() => setMode("idle")} className="flex-1 rounded-xl border border-slate-200 py-2 text-sm text-slate-500">Cancel</button>
             <button disabled={cur.length < MAX} onClick={handleCurrent} className="flex-1 rounded-xl bg-slate-900 py-2 text-sm font-semibold text-white disabled:opacity-40">Next</button>
@@ -3140,7 +3150,7 @@ function ChangePinCard() {
       {mode === "new" && (
         <div className="space-y-2">
           <label className="block text-xs font-semibold text-slate-500">Enter new PIN</label>
-          <input type="password" inputMode="numeric" maxLength={MAX} value={next} onChange={(e) => setNext(numOnly(e.target.value))} placeholder="â€¢â€¢â€¢â€¢" className={inputCls} autoFocus />
+          <input type="password" inputMode="numeric" maxLength={MAX} value={next} onChange={(e) => setNext(numOnly(e.target.value))} placeholder="••••" className={inputCls} autoFocus />
           <div className="flex gap-2">
             <button onClick={() => setMode("idle")} className="flex-1 rounded-xl border border-slate-200 py-2 text-sm text-slate-500">Cancel</button>
             <button disabled={next.length < MAX} onClick={handleNew} className="flex-1 rounded-xl bg-slate-900 py-2 text-sm font-semibold text-white disabled:opacity-40">Next</button>
@@ -3150,7 +3160,7 @@ function ChangePinCard() {
       {mode === "confirm" && (
         <div className="space-y-2">
           <label className="block text-xs font-semibold text-slate-500">Confirm new PIN</label>
-          <input type="password" inputMode="numeric" maxLength={MAX} placeholder="â€¢â€¢â€¢â€¢" className={inputCls} autoFocus
+          <input type="password" inputMode="numeric" maxLength={MAX} placeholder="••••" className={inputCls} autoFocus
             onChange={(e) => { const v = numOnly(e.target.value); if (v.length === MAX) handleConfirm(v); }} />
           <button onClick={() => setMode("idle")} className="w-full rounded-xl border border-slate-200 py-2 text-sm text-slate-500">Cancel</button>
         </div>
@@ -3172,7 +3182,7 @@ function SettingsView({ settings, setSettings }: any) {
         ))}
         <div><label className="mb-1 block text-xs font-semibold text-slate-500">Currency symbol</label>
         <select value={local.currency} onChange={(e) => set("currency", e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-          {["â‚¹","$","â‚¬","Â£"].map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+          {["₹","$","€","£"].map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
       </Card>
       <Card className="space-y-3">
         <div className="flex items-center gap-2"><Phone size={16} style={{ color: WHATSAPP_GREEN }} /><h3 className="text-sm font-bold text-slate-900">WhatsApp integration</h3></div>
@@ -3190,7 +3200,7 @@ function SettingsView({ settings, setSettings }: any) {
 /* ---- PIN Screen ---- */
 
 const PIN_KEY = "invoice_app_pin";
-// Session is tracked in React state only â€” clears on every page load/refresh
+// Session is tracked in React state only — clears on every page load/refresh
 
 function PinScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const storedPin = localStorage.getItem(PIN_KEY);
@@ -3273,9 +3283,9 @@ function PinScreen({ onUnlocked }: { onUnlocked: () => void }) {
 
         {/* Numpad */}
         <div className="grid grid-cols-3 gap-3 w-full">
-          {["1","2","3","4","5","6","7","8","9","","0","âŒ«"].map((k, i) => {
+          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((k, i) => {
             if (k === "") return <div key={i} />;
-            const isDelete = k === "âŒ«";
+            const isDelete = k === "⌫";
             return (
               <button
                 key={k + i}
@@ -3329,7 +3339,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   const [loadError, setLoadError] = useState("");
 
   const [settings, setSettings] = useState({
-    orgName: "SHREE BALAJI TRADERS", ownerName: "SBT", email: "SARANGPUR SANDAWTA ROAD PADLYA MATAJI", currency: "â‚¹", businessWhatsApp: "",
+    orgName: "SHREE BALAJI TRADERS", ownerName: "SBT", email: "SARANGPUR SANDAWTA ROAD PADLYA MATAJI", currency: "₹", businessWhatsApp: "",
   });
 
   const [customers, setCustomers] = useState<any[]>([]);
@@ -3474,7 +3484,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       }
 
       if (v.id) {
-        // editing an existing document â€” update in place, don't touch stock or status
+        // editing an existing document — update in place, don't touch stock or status
         const doc = await api.documents(type as any).update(v.id, payload);
         docSetter(type)((l: any[]) => l.map((x: any) => (x.id === v.id ? doc : x)));
         showToast(`${doc.number} updated`);
@@ -3489,11 +3499,11 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
         if (v.rolledEstimateIds && v.rolledEstimateIds.length) {
           setEstimates((l) => l.map((e) => (v.rolledEstimateIds.includes(e.id) ? { ...e, status: "Paid" } : e)));
         }
-        /* stock was deducted server-side â€” pull the fresh numbers */
+        /* stock was deducted server-side — pull the fresh numbers */
         const freshItems = await api.items.list();
         setItems(freshItems);
         if (lowStock && lowStock.length > 0) {
-          showToast(`âš ï¸ Low stock: ${lowStock.map((i: any) => `${i.name} (${i.stock} left)`).join(", ")}`);
+          showToast(`⚠️ Low stock: ${lowStock.map((i: any) => `${i.name} (${i.stock} left)`).join(", ")}`);
         } else {
           showToast(`${doc.number} created`);
         }
@@ -3521,7 +3531,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       const { payment, invoice } = await api.payments.create(v);
       setPayments((p) => [payment, ...p]);
       if (invoice) setEstimates((list) => list.map((i) => (i.id === invoice.id ? invoice : i)));
-      showToast(invoice?.status === "Paid" ? "Payment recorded â€” estimate fully paid" : invoice?.status === "Partially Paid" ? "Partial payment recorded" : "Payment recorded");
+      showToast(invoice?.status === "Paid" ? "Payment recorded — estimate fully paid" : invoice?.status === "Partially Paid" ? "Partial payment recorded" : "Payment recorded");
       closeModal();
     } catch (err) { onApiError(err, "Failed to record payment"); }
   };
@@ -3598,7 +3608,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   const printEstimate = (invoice: any) => {
     const customer = customers.find((c) => c.id === invoice.customerId);
     const lines = invoice.lines || [];
-    const COMPACT_MAX_LINES = 12; // beyond this, a quarter-strip can't stay readable â€” use a fresh full page instead
+    const COMPACT_MAX_LINES = 12; // beyond this, a quarter-strip can't stay readable — use a fresh full page instead
     const compact = lines.length <= COMPACT_MAX_LINES;
     const rowFont = lines.length <= 4 ? 8.5 : lines.length <= 8 ? 7.5 : 6.5;
 
@@ -3608,7 +3618,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       const qty = Number(ln.qty || 0);
       const rate = ln.rate ?? it?.price ?? 0;
       const amount = qty * rate;
-      return `<div class="ln"><span class="ln-name">${name} Ã— ${qty}</span><span class="ln-amt">${fmtMoney(amount, settings.currency)}</span></div>`;
+      return `<div class="ln"><span class="ln-name">${name} × ${qty}</span><span class="ln-amt">${fmtMoney(amount, settings.currency)}</span></div>`;
     }).join("");
 
     const extrasHtml = [
@@ -3620,16 +3630,16 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     const statusNote = invoice.status === "Paid"
       ? "PAID"
       : invoice.status === "Partially Paid"
-      ? `Partially paid â€” ${fmtMoney(Number(invoice.total || 0) - Number(invoice.amountPaid || 0), settings.currency)} due`
+      ? `Partially paid — ${fmtMoney(Number(invoice.total || 0) - Number(invoice.amountPaid || 0), settings.currency)} due`
       : invoice.status === "Accepted"
-      ? `Accepted â€” due ${fmtDate(invoice.dueDate)}`
+      ? `Accepted — due ${fmtDate(invoice.dueDate)}`
       : `Due ${fmtDate(invoice.dueDate)}`;
 
     const notesHtml = invoice.notes ? `<div class="notes">${invoice.notes}</div>` : "";
 
     const bodyHtml = `
       <div class="hd"><span class="org">${settings.orgName || "Your Business"}</span><span class="doc">ESTIMATE ${invoice.number}</span></div>
-      <div class="sub">${fmtDate(invoice.date)} Â· ${customer?.name || "Customer"}</div>
+      <div class="sub">${fmtDate(invoice.date)} · ${customer?.name || "Customer"}</div>
       <div class="lines">${rowsHtml}${extrasHtml}</div>
       <div class="tot"><span>Total</span><span>${fmtMoney(invoice.total, settings.currency)}</span></div>
       ${notesHtml}
@@ -3691,8 +3701,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
         <div className="px-5 pt-1">
           {autoReminder && overdueCount > 0 && <div className="mb-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 flex items-center gap-2"><AlertCircle size={16} /> {overdueCount} estimate{overdueCount !== 1 ? "s" : ""} overdue.</div>}
           <div className="mb-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-2.5 text-xs text-slate-500">
-            <span>Next print â†’ <b className="text-slate-700">top-{printSide}</b> corner</span>
-            <button onClick={togglePrintSide} className="font-semibold text-blue-600">Switch side â‡„</button>
+            <span>Next print → <b className="text-slate-700">top-{printSide}</b> corner</span>
+            <button onClick={togglePrintSide} className="font-semibold text-blue-600">Switch side ⇄</button>
           </div>
           <div className="-mx-5">
             <DocumentList type="estimate" docs={estimates} customers={customers} items={items} currency={settings.currency} openModal={openModal}
@@ -3763,7 +3773,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       return <DocumentModal type={type} customers={customers} items={items} estimates={estimates} editingDoc={payload?.editingDoc} onClose={closeModal} onSave={(v: any) => saveDocument(type, v)} />;
 
     if (type === "payment") {
-      const invoiceOptions = estimates.filter((i) => i.status !== "Paid").map((i) => ({ value: i.id, label: `${i.number} â€” ${fmtMoney(Number(i.total || 0) - Number(i.amountPaid || 0), settings.currency)} due` }));
+      const invoiceOptions = estimates.filter((i) => i.status !== "Paid").map((i) => ({ value: i.id, label: `${i.number} — ${fmtMoney(Number(i.total || 0) - Number(i.amountPaid || 0), settings.currency)} due` }));
       const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
       return <FieldModal title="Record Payment" fields={[
         { key: "customerId", label: "Customer", type: "select", options: customerOptions, required: true },
@@ -3793,7 +3803,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-3 bg-slate-50 text-slate-500">
         <Loader2 size={28} className="animate-spin" />
-        <p className="text-sm font-medium">Loading your dataâ€¦</p>
+        <p className="text-sm font-medium">Loading your data…</p>
       </div>
     );
   }
@@ -3919,7 +3929,7 @@ function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white disabled:opacity-50"
         >
           {busy && <Loader2 size={16} className="animate-spin" />}
-          {busy ? "Please waitâ€¦" : mode === "login" ? "Sign in" : "Create account"}
+          {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
         </button>
 
         <button
@@ -3939,3 +3949,691 @@ export default function App() {
   if (!authed) return <AuthScreen onAuthed={() => setAuthed(true)} />;
   return <InvoiceApp onSignOut={() => { api.setToken(null); setAuthed(false); }} />;
 }
+'@ | Set-Content -Path "frontend\src\Components\InvoiceApp.tsx" -Encoding UTF8
+Write-Host "  updated frontend\src\Components\InvoiceApp.tsx" -ForegroundColor Green
+
+New-Item -ItemType Directory -Force -Path (Split-Path "backend\models\Counter.js") | Out-Null
+@'
+const mongoose = require("mongoose");
+
+// Tracks the last-used sequence number per owner + document type (estimate/challan).
+// Incremented atomically via $inc so concurrent saves and deleted documents can
+// never cause two documents to be assigned the same number.
+const counterSchema = new mongoose.Schema(
+  {
+    owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    type: { type: String, required: true },
+    seq: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+counterSchema.index({ owner: 1, type: 1 }, { unique: true });
+
+module.exports = mongoose.model("Counter", counterSchema);
+'@ | Set-Content -Path "backend\models\Counter.js" -Encoding UTF8
+Write-Host "  updated backend\models\Counter.js" -ForegroundColor Green
+
+New-Item -ItemType Directory -Force -Path (Split-Path "backend\models\Document.js") | Out-Null
+@'
+const mongoose = require("mongoose");
+
+const lineSchema = new mongoose.Schema(
+  {
+    itemId: { type: mongoose.Schema.Types.ObjectId, ref: "Item" },
+    qty: { type: Number, default: 1 },
+    rate: { type: Number },
+  },
+  { _id: false }
+);
+
+const documentSchema = new mongoose.Schema(
+  {
+    owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    type: { type: String, enum: ["estimate", "challan"], required: true, index: true },
+    number: { type: String, required: true },
+    customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+    date: { type: String },
+    dueDate: { type: String },
+    lines: [lineSchema],
+    notes: { type: String },
+    total: { type: Number, default: 0 },
+    status: { type: String, default: "Due" },
+    // running total of payments applied against this document (positive payments minus refunds),
+    // used to distinguish Due / Partially Paid / Paid instead of a plain binary flag
+    amountPaid: { type: Number, default: 0 },
+    // only true when the user explicitly chose "Advance Booking" at save time — gates the
+    // batch-collection feature so it doesn't show up on ordinary estimates
+    isAdvanceBooking: { type: Boolean, default: false },
+    // estimate-specific extra charges/carry-forward
+    freightCost: { type: Number, default: 0 },
+    labourCost: { type: Number, default: 0 },
+    previousDue: { type: Number, default: 0 },
+    contractorName: { type: String },
+    destination: { type: String },
+    // challan-specific fields (route sheet)
+    route: { type: String },
+    fromDate: { type: String },
+    toDate: { type: String },
+    byWhom: { type: String },
+    transporter: { type: String },
+    expenses: [{ label: String, amount: Number }],
+    incomes: [{ label: String, amount: Number }],
+    deliveryFee: { type: Number },
+    feeVerified: { type: Boolean },
+    // items the customer returned after this estimate was paid — each entry books a refund
+    returns: [
+      {
+        itemId: { type: mongoose.Schema.Types.ObjectId, ref: "Item" },
+        name: { type: String },
+        qty: { type: Number },
+        rate: { type: Number },
+        amount: { type: Number },
+        date: { type: String },
+        _id: false,
+      },
+    ],
+    // advance-booking support: an estimate can be booked/paid up front but collected in
+    // arbitrary batches over time (e.g. 100 bags booked, taken 30 + 25 + ... later).
+    // Each entry logs one collected batch; it never exceeds the booked line qty.
+    deliveries: [
+      {
+        itemId: { type: mongoose.Schema.Types.ObjectId, ref: "Item" },
+        name: { type: String },
+        qty: { type: Number },
+        date: { type: String },
+        _id: false,
+      },
+    ],
+    // lightweight audit trail: creation, status changes, returns, and deliveries
+    // are all logged here so a document's story can be seen at a glance later
+    history: [
+      {
+        action: { type: String, required: true },
+        date: { type: String },
+        note: { type: String },
+        _id: false,
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Document", documentSchema);
+'@ | Set-Content -Path "backend\models\Document.js" -Encoding UTF8
+Write-Host "  updated backend\models\Document.js" -ForegroundColor Green
+
+New-Item -ItemType Directory -Force -Path (Split-Path "backend\controllers\documentController.js") | Out-Null
+@'
+const mongoose = require("mongoose");
+const Document = require("../models/Document");
+const Item = require("../models/Item");
+const Payment = require("../models/Payment");
+const Counter = require("../models/Counter");
+
+const PREFIX = { estimate: "EST", challan: "DC" };
+const DEFAULT_STATUS = { estimate: "Due", challan: "Pending" };
+
+// Atomically increments a persistent per-owner/per-type counter, so numbers never
+// repeat even after documents are deleted (unlike the old countDocuments()+1 scheme,
+// which could reassign an already-used number once something earlier was removed).
+async function nextNumber(owner, type) {
+  const counter = await Counter.findOneAndUpdate(
+    { owner, type },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  );
+  return `${PREFIX[type]}-${String(counter.seq).padStart(4, "0")}`;
+}
+
+// GET /api/:type   (type = quotes | invoices | challans)
+exports.list = (type) => async (req, res, next) => {
+  try {
+    const docs = await Document.find({ owner: req.userId, type }).sort({ createdAt: -1 });
+    res.json(docs);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/:type/:id
+exports.getOne = (type) => async (req, res, next) => {
+  try {
+    const doc = await Document.findOne({ _id: req.params.id, owner: req.userId, type });
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    res.json(doc);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/:type
+exports.create = (type) => async (req, res, next) => {
+  try {
+    const v = req.body;
+    const number = await nextNumber(req.userId, type);
+
+    const doc = await Document.create({
+      owner: req.userId,
+      type,
+      number,
+      customerId: v.customerId,
+      date: v.date,
+      dueDate: v.dueDate,
+      lines: v.lines || [],
+      notes: v.notes,
+      total: v.total || 0,
+      status: v.status || DEFAULT_STATUS[type],
+      // if created as already Paid (customer paid in full up front, no separate Payment
+      // row), reflect that in amountPaid; otherwise nothing has been paid yet
+      amountPaid: (v.status || DEFAULT_STATUS[type]) === "Paid" ? Number(v.total || 0) : 0,
+      isAdvanceBooking: type === "estimate" ? !!v.isAdvanceBooking : false,
+      freightCost: v.freightCost || 0,
+      labourCost: v.labourCost || 0,
+      previousDue: v.previousDue || 0,
+      contractorName: v.contractorName || "",
+      destination: v.destination || "",
+      route: v.route,
+      fromDate: v.fromDate,
+      toDate: v.toDate,
+      byWhom: v.byWhom,
+      transporter: v.transporter,
+      expenses: v.expenses,
+      incomes: v.incomes,
+      deliveryFee: v.deliveryFee,
+      feeVerified: v.feeVerified,
+      history: [{ action: "Created", date: v.date || new Date().toISOString().slice(0, 10) }],
+    });
+
+    // the previous-due amount just folded into this estimate's total came from these
+    // older, still-unpaid estimates for the same customer — mark them settled so the
+    // balance isn't counted twice in outstanding totals.
+    if (type === "estimate" && Array.isArray(v.rolledEstimateIds) && v.rolledEstimateIds.length) {
+      const rolled = await Document.find({ _id: { $in: v.rolledEstimateIds }, owner: req.userId, type: "estimate", customerId: v.customerId, status: { $ne: "Paid" } });
+      for (const r of rolled) {
+        r.status = "Paid";
+        r.amountPaid = Number(r.total || 0);
+        await r.save();
+      }
+    }
+
+    let lowStock = [];
+    // deduct stock from items when an estimate is created, exactly like the frontend used to do client-side
+    if (type === "estimate" && Array.isArray(v.lines) && v.lines.length) {
+      for (const line of v.lines) {
+        if (!line.itemId) continue;
+        const item = await Item.findOneAndUpdate(
+          { _id: line.itemId, owner: req.userId },
+          { $inc: { stock: -Number(line.qty || 0) } },
+          { new: true }
+        );
+        if (item) {
+          if (item.stock < 0) {
+            item.stock = 0;
+            await item.save();
+          }
+          const threshold = item.lowStock ?? 5;
+          if (item.stock <= threshold) lowStock.push({ name: item.name, stock: item.stock });
+        }
+      }
+    }
+
+    res.status(201).json({ doc, lowStock });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PUT /api/:type/:id
+exports.update = (type) => async (req, res, next) => {
+  try {
+    const doc = await Document.findOneAndUpdate(
+      { _id: req.params.id, owner: req.userId, type },
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    res.json(doc);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PATCH /api/:type/:id/status   { status }
+exports.updateStatus = (type) => async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    const update = { status };
+    // manually marking an estimate Paid (e.g. no separate payment logged) should also
+    // reflect in amountPaid so the paid/due breakdown shown to the user stays consistent
+    if (type === "estimate" && status === "Paid") {
+      const existing = await Document.findOne({ _id: req.params.id, owner: req.userId, type });
+      if (existing) update.amountPaid = Number(existing.total || 0);
+    }
+    const doc = await Document.findOneAndUpdate(
+      { _id: req.params.id, owner: req.userId, type },
+      { $set: update, $push: { history: { action: `Status changed to ${status}`, date: new Date().toISOString().slice(0, 10) } } },
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    res.json(doc);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// DELETE /api/:type/:id
+exports.remove = (type) => async (req, res, next) => {
+  try {
+    const doc = await Document.findOneAndDelete({ _id: req.params.id, owner: req.userId, type });
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Deleted", id: req.params.id });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/:type/:id/returns   { lines: [{ itemId, qty }] }
+// Customer returns some items from a paid estimate: restock those items and
+// refund the customer for exactly what they're handing back.
+exports.addReturn = (type) => async (req, res, next) => {
+  try {
+    const doc = await Document.findOne({ _id: req.params.id, owner: req.userId, type });
+    if (!doc) return res.status(404).json({ message: "Not found" });
+
+    const requestedLines = Array.isArray(req.body.lines) ? req.body.lines : [];
+    if (!requestedLines.length) return res.status(400).json({ message: "No items to return" });
+
+    const alreadyReturned = {};
+    for (const r of doc.returns || []) {
+      alreadyReturned[String(r.itemId)] = (alreadyReturned[String(r.itemId)] || 0) + r.qty;
+    }
+
+    const newReturns = [];
+    let refundTotal = 0;
+    const date = req.body.date || new Date().toISOString().slice(0, 10);
+
+    for (const reqLine of requestedLines) {
+      const qty = Number(reqLine.qty || 0);
+      if (qty <= 0) continue;
+      const line = (doc.lines || []).find((l) => String(l.itemId) === String(reqLine.itemId));
+      if (!line) continue;
+
+      const returnedSoFar = alreadyReturned[String(reqLine.itemId)] || 0;
+      const maxReturnable = Number(line.qty || 0) - returnedSoFar;
+      const finalQty = Math.min(qty, maxReturnable);
+      if (finalQty <= 0) continue;
+
+      const item = await Item.findOne({ _id: reqLine.itemId, owner: req.userId });
+      const amount = finalQty * Number(line.rate || 0);
+
+      newReturns.push({
+        itemId: reqLine.itemId,
+        name: item?.name || "Item",
+        qty: finalQty,
+        rate: Number(line.rate || 0),
+        amount,
+        date,
+      });
+      refundTotal += amount;
+      alreadyReturned[String(reqLine.itemId)] = returnedSoFar + finalQty;
+
+      // put the returned stock back
+      await Item.findOneAndUpdate({ _id: reqLine.itemId, owner: req.userId }, { $inc: { stock: finalQty } });
+    }
+
+    if (!newReturns.length) return res.status(400).json({ message: "Nothing valid to return" });
+
+    doc.returns = [...(doc.returns || []), ...newReturns];
+    doc.history = [...(doc.history || []), { action: "Return recorded", date, note: `Refund ${refundTotal}` }];
+    await doc.save();
+
+    // book the refund as a negative payment so reports/outstanding totals net out automatically
+    const payment = await Payment.create({
+      owner: req.userId,
+      customerId: doc.customerId,
+      amount: -refundTotal,
+      date,
+      method: "Refund",
+      invoiceId: doc._id,
+      invoiceNumber: doc.number,
+    });
+
+    const freshItems = await Item.find({ owner: req.userId });
+    res.json({ doc, payment, items: freshItems });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/:type/:id/deliveries   { lines: [{ itemId, qty }], date }
+// Advance-booking support: log a batch of items the customer is collecting now
+// against an estimate they already booked (and typically already paid for).
+// Stock was already deducted when the estimate was created, so this endpoint only
+// tracks how much of each booked line has been physically handed over so far —
+// it never lets the collected total cross the originally booked quantity.
+exports.addDelivery = (type) => async (req, res, next) => {
+  try {
+    const doc = await Document.findOne({ _id: req.params.id, owner: req.userId, type });
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    if (!doc.isAdvanceBooking) {
+      return res.status(400).json({ message: "This estimate isn't marked as an advance booking" });
+    }
+
+    const requestedLines = Array.isArray(req.body.lines) ? req.body.lines : [];
+    if (!requestedLines.length) return res.status(400).json({ message: "No items to record" });
+
+    const deliveredSoFar = {};
+    for (const d of doc.deliveries || []) {
+      deliveredSoFar[String(d.itemId)] = (deliveredSoFar[String(d.itemId)] || 0) + d.qty;
+    }
+    const returnedSoFar = {};
+    for (const r of doc.returns || []) {
+      returnedSoFar[String(r.itemId)] = (returnedSoFar[String(r.itemId)] || 0) + r.qty;
+    }
+
+    const newDeliveries = [];
+    const date = req.body.date || new Date().toISOString().slice(0, 10);
+
+    for (const reqLine of requestedLines) {
+      const qty = Number(reqLine.qty || 0);
+      if (qty <= 0) continue;
+      const line = (doc.lines || []).find((l) => String(l.itemId) === String(reqLine.itemId));
+      if (!line) continue;
+
+      const key = String(reqLine.itemId);
+      const alreadyDelivered = deliveredSoFar[key] || 0;
+      const alreadyReturned = returnedSoFar[key] || 0;
+      const remaining = Number(line.qty || 0) - alreadyDelivered - alreadyReturned;
+      const finalQty = Math.min(qty, Math.max(remaining, 0));
+      if (finalQty <= 0) continue;
+
+      const item = await Item.findOne({ _id: reqLine.itemId, owner: req.userId });
+      newDeliveries.push({ itemId: reqLine.itemId, name: item?.name || "Item", qty: finalQty, date });
+      deliveredSoFar[key] = alreadyDelivered + finalQty;
+    }
+
+    if (!newDeliveries.length) {
+      return res.status(400).json({ message: "Nothing left to collect against the booked quantity" });
+    }
+
+    doc.deliveries = [...(doc.deliveries || []), ...newDeliveries];
+    doc.history = [...(doc.history || []), { action: "Collection recorded", date, note: newDeliveries.map((d) => `${d.name} x${d.qty}`).join(", ") }];
+    await doc.save();
+
+    res.json({ doc });
+  } catch (err) {
+    next(err);
+  }
+};
+'@ | Set-Content -Path "backend\controllers\documentController.js" -Encoding UTF8
+Write-Host "  updated backend\controllers\documentController.js" -ForegroundColor Green
+
+New-Item -ItemType Directory -Force -Path (Split-Path "backend\controllers\paymentController.js") | Out-Null
+@'
+const Payment = require("../models/Payment");
+const Document = require("../models/Document");
+const crudController = require("./crudController");
+
+const base = crudController(Payment);
+
+// recompute an invoice's amountPaid + status from the sum of every payment/refund
+// linked to it (Due -> Partially Paid -> Paid), rather than a blind binary flag
+async function recalcInvoice(owner, invoiceId, historyEntry) {
+  const invoice = await Document.findOne({ _id: invoiceId, owner, type: "estimate" });
+  if (!invoice) return null;
+
+  const payments = await Payment.find({ owner, invoiceId });
+  const paidSoFar = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const total = Number(invoice.total || 0);
+
+  invoice.amountPaid = paidSoFar;
+  if (total > 0 && paidSoFar >= total) invoice.status = "Paid";
+  else if (paidSoFar > 0) invoice.status = "Partially Paid";
+  else invoice.status = "Due";
+
+  if (historyEntry) invoice.history = [...(invoice.history || []), historyEntry];
+
+  await invoice.save();
+  return invoice;
+}
+
+// override create: record payment + recompute the related invoice's paid amount/status
+base.create = async (req, res, next) => {
+  try {
+    const v = req.body;
+    let invoiceNumber;
+
+    if (v.invoiceId) {
+      const existing = await Document.findOne({ _id: v.invoiceId, owner: req.userId, type: "estimate" });
+      invoiceNumber = existing?.number;
+    }
+
+    const payment = await Payment.create({
+      owner: req.userId,
+      customerId: v.customerId,
+      amount: Number(v.amount),
+      date: v.date || new Date().toISOString().slice(0, 10),
+      method: v.method,
+      invoiceId: v.invoiceId,
+      invoiceNumber,
+    });
+
+    let invoice = null;
+    if (v.invoiceId) {
+      const isRefund = Number(v.amount) < 0;
+      invoice = await recalcInvoice(req.userId, v.invoiceId, {
+        action: isRefund ? "Refund issued" : "Payment received",
+        date: payment.date,
+        note: `${v.method || "Cash"} · ${Math.abs(Number(v.amount))}`,
+      });
+    }
+
+    res.status(201).json({ payment, invoice });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// override remove: after deleting a payment, recompute the linked invoice too so
+// removing a payment doesn't leave it stuck showing as Paid/Partially Paid
+base.remove = async (req, res, next) => {
+  try {
+    const payment = await Payment.findOneAndDelete({ _id: req.params.id, owner: req.userId });
+    if (!payment) return res.status(404).json({ message: "Not found" });
+
+    let invoice = null;
+    if (payment.invoiceId) {
+      invoice = await recalcInvoice(req.userId, payment.invoiceId, {
+        action: "Payment entry removed",
+        date: new Date().toISOString().slice(0, 10),
+        note: `${payment.method || "Cash"} · ${Math.abs(Number(payment.amount))}`,
+      });
+    }
+
+    res.json({ message: "Deleted", id: req.params.id, invoice });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = base;
+'@ | Set-Content -Path "backend\controllers\paymentController.js" -Encoding UTF8
+Write-Host "  updated backend\controllers\paymentController.js" -ForegroundColor Green
+
+New-Item -ItemType Directory -Force -Path (Split-Path "backend\controllers\reportsController.js") | Out-Null
+@'
+const Document = require("../models/Document");
+const Expense = require("../models/Expense");
+const Payment = require("../models/Payment");
+const Item = require("../models/Item");
+const Customer = require("../models/Customer");
+
+// GET /api/reports/summary
+exports.summary = async (req, res, next) => {
+  try {
+    const owner = req.userId;
+    const [estimates, challans, expenses, payments, items, customers] = await Promise.all([
+      Document.find({ owner, type: "estimate" }),
+      Document.find({ owner, type: "challan" }),
+      Expense.find({ owner }),
+      Payment.find({ owner }),
+      Item.find({ owner }),
+      Customer.find({ owner }),
+    ]);
+
+    const totalInvoiced = estimates.reduce((s, d) => s + (d.total || 0), 0);
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+    const outstanding = estimates.filter((i) => i.status !== "Paid").reduce((s, d) => s + (d.total || 0), 0);
+    const overdue = estimates.filter((i) => i.status === "Due" && i.dueDate && new Date(i.dueDate) < new Date());
+    const lowStockItems = items.filter((it) => (it.stock ?? 0) <= (it.lowStock ?? 5));
+
+    // Real gross-margin calculation: revenue and cost-of-goods-sold per item, derived
+    // from each estimate's line items (and reversed for any returns). This is distinct
+    // from netProfit below, which is cash collected minus overhead expenses and ignores
+    // what the goods actually cost to buy.
+    const itemMap = new Map(items.map((it) => [String(it._id), it]));
+    const itemStats = new Map(); // itemId -> { name, qtySold, revenue, cost }
+
+    const bump = (itemId, name, qty, revenue, cost) => {
+      const key = String(itemId || "unknown");
+      const cur = itemStats.get(key) || { itemId: key, name: name || "Unknown item", qtySold: 0, revenue: 0, cost: 0 };
+      cur.qtySold += qty;
+      cur.revenue += revenue;
+      cur.cost += cost;
+      if (name) cur.name = name;
+      itemStats.set(key, cur);
+    };
+
+    for (const doc of estimates) {
+      for (const line of doc.lines || []) {
+        const item = itemMap.get(String(line.itemId));
+        const qty = Number(line.qty || 0);
+        const rate = Number(line.rate || 0);
+        const purchasePrice = Number(item?.purchasePrice || 0);
+        bump(line.itemId, item?.name, qty, qty * rate, qty * purchasePrice);
+      }
+      for (const ret of doc.returns || []) {
+        const item = itemMap.get(String(ret.itemId));
+        const qty = Number(ret.qty || 0);
+        const revenueBack = Number(ret.amount || qty * Number(ret.rate || 0));
+        const purchasePrice = Number(item?.purchasePrice || 0);
+        // a return reverses both the revenue and the cost of goods for that quantity
+        bump(ret.itemId, ret.name || item?.name, -qty, -revenueBack, -qty * purchasePrice);
+      }
+    }
+
+    const itemProfitability = Array.from(itemStats.values())
+      .map((s) => ({ ...s, margin: s.revenue - s.cost, marginPercent: s.revenue ? ((s.revenue - s.cost) / s.revenue) * 100 : 0 }))
+      .sort((a, b) => b.margin - a.margin);
+
+    const costOfGoodsSold = itemProfitability.reduce((s, i) => s + i.cost, 0);
+    const itemRevenue = itemProfitability.reduce((s, i) => s + i.revenue, 0);
+    const grossProfit = itemRevenue - costOfGoodsSold;
+    const grossMarginPercent = itemRevenue ? (grossProfit / itemRevenue) * 100 : 0;
+
+    res.json({
+      counts: {
+        customers: customers.length,
+        items: items.length,
+        estimates: estimates.length,
+        challans: challans.length,
+      },
+      totals: {
+        totalInvoiced,
+        totalPaid,
+        totalExpenses,
+        outstanding,
+        netProfit: totalPaid - totalExpenses,
+        costOfGoodsSold,
+        grossProfit,
+        grossMarginPercent,
+      },
+      itemProfitability,
+      overdueCount: overdue.length,
+      lowStockItems,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+'@ | Set-Content -Path "backend\controllers\reportsController.js" -Encoding UTF8
+Write-Host "  updated backend\controllers\reportsController.js" -ForegroundColor Green
+
+New-Item -ItemType Directory -Force -Path (Split-Path "backend\scripts\seedDocumentCounters.js") | Out-Null
+@'
+/**
+ * One-time setup for the persistent estimate/challan numbering fix.
+ *
+ * The old numbering scheme derived the next number from countDocuments(), which
+ * could reassign an already-used number once an earlier document was deleted.
+ * The new scheme uses an atomic Counter collection instead — but that counter
+ * needs to start at least as high as the highest number already in use, or the
+ * very next estimate/challan created after deploying would restart at 0001 and
+ * collide with an existing one.
+ *
+ * This script scans existing documents, finds the highest numeric suffix already
+ * used per owner + type, and seeds the Counter collection to match.
+ *
+ * Run once, locally, after pulling this update and BEFORE deploying it:
+ *   cd backend
+ *   node scripts/seedDocumentCounters.js
+ *
+ * Requires MONGODB_URI to be set (reads backend/.env automatically if present).
+ * Safe to re-run — it only raises a counter, never lowers one.
+ */
+require("dotenv").config();
+const mongoose = require("mongoose");
+
+async function run() {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error("MONGODB_URI is not set. Add it to backend/.env or export it before running.");
+    process.exit(1);
+  }
+
+  await mongoose.connect(uri);
+  console.log("Connected:", mongoose.connection.host);
+
+  const Document = mongoose.connection.collection("documents");
+  const Counter = mongoose.connection.collection("counters");
+
+  const types = ["estimate", "challan"];
+  for (const type of types) {
+    const docs = await Document.find({ type }).toArray();
+    const maxSeqByOwner = {};
+
+    for (const doc of docs) {
+      const ownerKey = String(doc.owner);
+      const match = /(\d+)\s*$/.exec(doc.number || "");
+      const seq = match ? parseInt(match[1], 10) : 0;
+      if (!maxSeqByOwner[ownerKey] || seq > maxSeqByOwner[ownerKey]) {
+        maxSeqByOwner[ownerKey] = seq;
+      }
+    }
+
+    for (const [ownerKey, maxSeq] of Object.entries(maxSeqByOwner)) {
+      const existing = await Counter.findOne({ owner: new mongoose.Types.ObjectId(ownerKey), type });
+      const nextSeq = Math.max(maxSeq, existing?.seq || 0);
+      await Counter.updateOne(
+        { owner: new mongoose.Types.ObjectId(ownerKey), type },
+        { $set: { seq: nextSeq } },
+        { upsert: true }
+      );
+      console.log(`Seeded counter — owner ${ownerKey}, type ${type}, seq ${nextSeq}`);
+    }
+  }
+
+  console.log("Done. Future estimates/challans will continue from these counters without colliding with existing numbers.");
+  await mongoose.disconnect();
+}
+
+run().catch((err) => {
+  console.error("Seeding failed:", err);
+  process.exit(1);
+});
+'@ | Set-Content -Path "backend\scripts\seedDocumentCounters.js" -Encoding UTF8
+Write-Host "  updated backend\scripts\seedDocumentCounters.js" -ForegroundColor Green
+
+Write-Host "Done. Now run: cd backend && node scripts/seedDocumentCounters.js (before deploying)" -ForegroundColor Yellow

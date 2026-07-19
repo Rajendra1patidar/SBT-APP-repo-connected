@@ -1,14 +1,22 @@
-const mongoose = require("mongoose");
+﻿const mongoose = require("mongoose");
 const Document = require("../models/Document");
 const Item = require("../models/Item");
 const Payment = require("../models/Payment");
+const Counter = require("../models/Counter");
 
 const PREFIX = { estimate: "EST", challan: "DC" };
 const DEFAULT_STATUS = { estimate: "Due", challan: "Pending" };
 
+// Atomically increments a persistent per-owner/per-type counter, so numbers never
+// repeat even after documents are deleted (unlike the old countDocuments()+1 scheme,
+// which could reassign an already-used number once something earlier was removed).
 async function nextNumber(owner, type) {
-  const count = await Document.countDocuments({ owner, type });
-  return `${PREFIX[type]}-${String(count + 1).padStart(4, "0")}`;
+  const counter = await Counter.findOneAndUpdate(
+    { owner, type },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  );
+  return `${PREFIX[type]}-${String(counter.seq).padStart(4, "0")}`;
 }
 
 // GET /api/:type   (type = quotes | invoices | challans)
@@ -67,10 +75,11 @@ exports.create = (type) => async (req, res, next) => {
       incomes: v.incomes,
       deliveryFee: v.deliveryFee,
       feeVerified: v.feeVerified,
+      history: [{ action: "Created", date: v.date || new Date().toISOString().slice(0, 10) }],
     });
 
     // the previous-due amount just folded into this estimate's total came from these
-    // older, still-unpaid estimates for the same customer — mark them settled so the
+    // older, still-unpaid estimates for the same customer â€” mark them settled so the
     // balance isn't counted twice in outstanding totals.
     if (type === "estimate" && Array.isArray(v.rolledEstimateIds) && v.rolledEstimateIds.length) {
       const rolled = await Document.find({ _id: { $in: v.rolledEstimateIds }, owner: req.userId, type: "estimate", customerId: v.customerId, status: { $ne: "Paid" } });
@@ -136,7 +145,7 @@ exports.updateStatus = (type) => async (req, res, next) => {
     }
     const doc = await Document.findOneAndUpdate(
       { _id: req.params.id, owner: req.userId, type },
-      { $set: update },
+      { $set: update, $push: { history: { action: `Status changed to ${status}`, date: new Date().toISOString().slice(0, 10) } } },
       { new: true }
     );
     if (!doc) return res.status(404).json({ message: "Not found" });
@@ -209,6 +218,7 @@ exports.addReturn = (type) => async (req, res, next) => {
     if (!newReturns.length) return res.status(400).json({ message: "Nothing valid to return" });
 
     doc.returns = [...(doc.returns || []), ...newReturns];
+    doc.history = [...(doc.history || []), { action: "Return recorded", date, note: `Refund ${refundTotal}` }];
     await doc.save();
 
     // book the refund as a negative payment so reports/outstanding totals net out automatically
@@ -233,7 +243,7 @@ exports.addReturn = (type) => async (req, res, next) => {
 // Advance-booking support: log a batch of items the customer is collecting now
 // against an estimate they already booked (and typically already paid for).
 // Stock was already deducted when the estimate was created, so this endpoint only
-// tracks how much of each booked line has been physically handed over so far —
+// tracks how much of each booked line has been physically handed over so far â€”
 // it never lets the collected total cross the originally booked quantity.
 exports.addDelivery = (type) => async (req, res, next) => {
   try {
@@ -281,6 +291,7 @@ exports.addDelivery = (type) => async (req, res, next) => {
     }
 
     doc.deliveries = [...(doc.deliveries || []), ...newDeliveries];
+    doc.history = [...(doc.history || []), { action: "Collection recorded", date, note: newDeliveries.map((d) => `${d.name} x${d.qty}`).join(", ") }];
     await doc.save();
 
     res.json({ doc });
