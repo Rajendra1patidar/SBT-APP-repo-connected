@@ -1,4 +1,4 @@
-﻿const Payment = require("../models/Payment");
+const Payment = require("../models/Payment");
 const Document = require("../models/Document");
 const crudController = require("./crudController");
 
@@ -52,7 +52,7 @@ base.create = async (req, res, next) => {
       invoice = await recalcInvoice(req.userId, v.invoiceId, {
         action: isRefund ? "Refund issued" : "Payment received",
         date: payment.date,
-        note: `${v.method || "Cash"} Â· ${Math.abs(Number(v.amount))}`,
+        note: `${v.method || "Cash"} · ${Math.abs(Number(v.amount))}`,
       });
     }
 
@@ -74,7 +74,7 @@ base.remove = async (req, res, next) => {
       invoice = await recalcInvoice(req.userId, payment.invoiceId, {
         action: "Payment entry removed",
         date: new Date().toISOString().slice(0, 10),
-        note: `${payment.method || "Cash"} Â· ${Math.abs(Number(payment.amount))}`,
+        note: `${payment.method || "Cash"} · ${Math.abs(Number(payment.amount))}`,
       });
     }
 

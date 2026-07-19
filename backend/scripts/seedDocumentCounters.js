@@ -1,9 +1,9 @@
-﻿/**
+/**
  * One-time setup for the persistent estimate/challan numbering fix.
  *
  * The old numbering scheme derived the next number from countDocuments(), which
  * could reassign an already-used number once an earlier document was deleted.
- * The new scheme uses an atomic Counter collection instead â€” but that counter
+ * The new scheme uses an atomic Counter collection instead — but that counter
  * needs to start at least as high as the highest number already in use, or the
  * very next estimate/challan created after deploying would restart at 0001 and
  * collide with an existing one.
@@ -16,7 +16,7 @@
  *   node scripts/seedDocumentCounters.js
  *
  * Requires MONGODB_URI to be set (reads backend/.env automatically if present).
- * Safe to re-run â€” it only raises a counter, never lowers one.
+ * Safe to re-run — it only raises a counter, never lowers one.
  */
 require("dotenv").config();
 const mongoose = require("mongoose");
@@ -56,7 +56,7 @@ async function run() {
         { $set: { seq: nextSeq } },
         { upsert: true }
       );
-      console.log(`Seeded counter â€” owner ${ownerKey}, type ${type}, seq ${nextSeq}`);
+      console.log(`Seeded counter — owner ${ownerKey}, type ${type}, seq ${nextSeq}`);
     }
   }
 

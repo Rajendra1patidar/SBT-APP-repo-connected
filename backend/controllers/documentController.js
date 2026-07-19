@@ -1,4 +1,4 @@
-﻿const mongoose = require("mongoose");
+const mongoose = require("mongoose");
 const Document = require("../models/Document");
 const Item = require("../models/Item");
 const Payment = require("../models/Payment");
@@ -79,7 +79,7 @@ exports.create = (type) => async (req, res, next) => {
     });
 
     // the previous-due amount just folded into this estimate's total came from these
-    // older, still-unpaid estimates for the same customer â€” mark them settled so the
+    // older, still-unpaid estimates for the same customer — mark them settled so the
     // balance isn't counted twice in outstanding totals.
     if (type === "estimate" && Array.isArray(v.rolledEstimateIds) && v.rolledEstimateIds.length) {
       const rolled = await Document.find({ _id: { $in: v.rolledEstimateIds }, owner: req.userId, type: "estimate", customerId: v.customerId, status: { $ne: "Paid" } });
@@ -243,7 +243,7 @@ exports.addReturn = (type) => async (req, res, next) => {
 // Advance-booking support: log a batch of items the customer is collecting now
 // against an estimate they already booked (and typically already paid for).
 // Stock was already deducted when the estimate was created, so this endpoint only
-// tracks how much of each booked line has been physically handed over so far â€”
+// tracks how much of each booked line has been physically handed over so far —
 // it never lets the collected total cross the originally booked quantity.
 exports.addDelivery = (type) => async (req, res, next) => {
   try {

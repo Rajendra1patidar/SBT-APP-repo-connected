@@ -1,4 +1,4 @@
-﻿const mongoose = require("mongoose");
+const mongoose = require("mongoose");
 
 // Tracks the last-used sequence number per owner + document type (estimate/challan).
 // Incremented atomically via $inc so concurrent saves and deleted documents can

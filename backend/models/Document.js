@@ -1,4 +1,4 @@
-﻿const mongoose = require("mongoose");
+const mongoose = require("mongoose");
 
 const lineSchema = new mongoose.Schema(
   {
@@ -24,7 +24,7 @@ const documentSchema = new mongoose.Schema(
     // running total of payments applied against this document (positive payments minus refunds),
     // used to distinguish Due / Partially Paid / Paid instead of a plain binary flag
     amountPaid: { type: Number, default: 0 },
-    // only true when the user explicitly chose "Advance Booking" at save time â€” gates the
+    // only true when the user explicitly chose "Advance Booking" at save time — gates the
     // batch-collection feature so it doesn't show up on ordinary estimates
     isAdvanceBooking: { type: Boolean, default: false },
     // estimate-specific extra charges/carry-forward
@@ -43,7 +43,7 @@ const documentSchema = new mongoose.Schema(
     incomes: [{ label: String, amount: Number }],
     deliveryFee: { type: Number },
     feeVerified: { type: Boolean },
-    // items the customer returned after this estimate was paid â€” each entry books a refund
+    // items the customer returned after this estimate was paid — each entry books a refund
     returns: [
       {
         itemId: { type: mongoose.Schema.Types.ObjectId, ref: "Item" },

@@ -1,4 +1,4 @@
-﻿const Document = require("../models/Document");
+const Document = require("../models/Document");
 const Expense = require("../models/Expense");
 const Payment = require("../models/Payment");
 const Item = require("../models/Item");
