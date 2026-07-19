@@ -1,11 +1,19 @@
-# Shree Balaji Traders — Invoicing App
+const mongoose = require("mongoose");
 
-A full invoicing/inventory app: customers, items, stock orders, quotes, invoices, delivery challans,
-expenses, payments, and reports.
+async function connectDB() {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error("MONGODB_URI is not set in environment variables.");
+    process.exit(1);
+  }
+  try {
+    mongoose.set("strictQuery", true);
+    await mongoose.connect(uri);
+    console.log("MongoDB connected:", mongoose.connection.host);
+  } catch (err) {
+    console.error("MongoDB connection error:", err.message);
+    process.exit(1);
+  }
+}
 
-
-## Status
-
-Item returns are now supported: from any estimate, use "Return items" to record
-returned quantities, which books a refund for the customer and restocks inventory
-automatically.
+module.exports = connectDB;
