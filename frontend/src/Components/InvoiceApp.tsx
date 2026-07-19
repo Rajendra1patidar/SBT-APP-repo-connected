@@ -5,7 +5,7 @@ import {
   Bell, LifeBuoy, Plus, Trash2, Phone, ChevronDown, Sparkles, RotateCcw,
   Send, Check, CheckCircle2, AlertCircle, ArrowRight, MessageSquare,
   Search, MapPin, PackageCheck, ClipboardList, ChevronUp, AlertTriangle,
-  ShoppingCart, Loader2, Pencil, Printer, HardHat, Award
+  ShoppingCart, Loader2, Pencil, Printer, HardHat, Award, ChevronLeft, Eye
 } from "lucide-react";
 import { api } from "../lib/api";
 
@@ -15,6 +15,28 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+/** Per-line advance-booking progress: how much of a booked qty has been collected/returned so far. */
+function bookingLineProgress(doc: any) {
+  const deliveredByItem: Record<string, number> = {};
+  for (const d of doc.deliveries || []) deliveredByItem[d.itemId] = (deliveredByItem[d.itemId] || 0) + d.qty;
+  const returnedByItem: Record<string, number> = {};
+  for (const r of doc.returns || []) returnedByItem[r.itemId] = (returnedByItem[r.itemId] || 0) + r.qty;
+
+  return (doc.lines || []).map((l: any) => {
+    const booked = Number(l.qty || 0);
+    const delivered = deliveredByItem[l.itemId] || 0;
+    const returned = returnedByItem[l.itemId] || 0;
+    const remaining = Math.max(booked - delivered - returned, 0);
+    return { itemId: l.itemId, rate: l.rate, booked, delivered, returned, remaining };
+  });
+}
+
+/** True once every booked line on this estimate has been fully collected (or returned). */
+function isFullyCollected(doc: any) {
+  const rows = bookingLineProgress(doc);
+  return rows.length > 0 && rows.every((r: any) => r.remaining <= 0);
+}
 
 const WHATSAPP_GREEN = "#25D366";
 const LOW_STOCK_DEFAULT = 5;
@@ -60,6 +82,7 @@ function fmtMoney(n: number | string, currency: string) {
 const STATUS_STYLES: Record<string, string> = {
   Accepted: "bg-blue-100 text-blue-700",
   Due: "bg-amber-100 text-amber-700",
+  "Partially Paid": "bg-sky-100 text-sky-700",
   Paid: "bg-emerald-100 text-emerald-700",
   Overdue: "bg-rose-100 text-rose-700",
   Pending: "bg-amber-100 text-amber-700",
@@ -140,8 +163,8 @@ function EmptyState({ text, cta, onCta }: any) {
     </div>
   );
 }
-function Card({ children, className = "" }: any) {
-  return <div className={`rounded-2xl bg-white p-5 shadow-sm border border-slate-100 ${className}`}>{children}</div>;
+function Card({ children, className = "", onClick }: any) {
+  return <div onClick={onClick} className={`rounded-2xl bg-white p-5 shadow-sm border border-slate-100 ${className}`}>{children}</div>;
 }
 
 /* ---- FieldModal ---- */
@@ -405,8 +428,9 @@ function StatusChoicePopup({ total, currency, onChoose, onCancel }: any) {
         <h3 className="text-lg font-bold text-slate-900">Is this estimate paid?</h3>
         <p className="mt-1 text-sm text-slate-500">Total amount: <span className="font-semibold text-slate-700">{fmtMoney(total, currency)}</span></p>
         <div className="mt-5 space-y-2">
-          <button onClick={() => onChoose("Paid")} className="w-full rounded-full bg-emerald-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Paid — customer has paid</button>
-          <button onClick={() => onChoose("Due")} className="w-full rounded-full bg-amber-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Due — payment pending</button>
+          <button onClick={() => onChoose("Paid", false)} className="w-full rounded-full bg-emerald-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Paid — customer has paid</button>
+          <button onClick={() => onChoose("Due", false)} className="w-full rounded-full bg-amber-500 py-3 text-sm font-bold text-white active:scale-[0.98]">Due — payment pending</button>
+          <button onClick={() => onChoose("Paid", true)} className="w-full rounded-full bg-blue-600 py-3 text-sm font-bold text-white active:scale-[0.98]">Advance Booking — paid now, collected in batches</button>
           <button onClick={onCancel} className="w-full rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-500">Back to editing</button>
         </div>
       </div>
@@ -427,7 +451,17 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
   const [includePreviousDue, setIncludePreviousDue] = useState(!isEditing);
   const [contractorName, setContractorName] = useState(editingDoc?.contractorName || "");
   const [destination, setDestination] = useState(editingDoc?.destination || "");
+  // tracks whether the destination field holds a value the user deliberately set/edited,
+  // so switching customers only auto-fills an empty/untouched destination and never overwrites it
+  const [destinationTouched, setDestinationTouched] = useState(!!editingDoc?.destination);
   const [pendingSave, setPendingSave] = useState<any>(null);
+
+  useEffect(() => {
+    if (type !== "estimate" || destinationTouched) return;
+    const customer = customers.find((c: any) => c.id === customerId);
+    if (customer?.location) setDestination(customer.location);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
 
   const knownContractors = Array.from(new Set((estimates || []).map((e: any) => e.contractorName).filter(Boolean))) as string[];
   const knownDestinations = Array.from(new Set((estimates || []).map((e: any) => e.destination).filter(Boolean))) as string[];
@@ -444,7 +478,7 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
 
   // when editing, exclude the estimate being edited itself from its own "previous due" calculation
   const previousDueEstimates = type === "estimate" && !isEditing ? (estimates || []).filter((e: any) => e.customerId === customerId && e.status !== "Paid") : [];
-  const previousDueAmount = previousDueEstimates.reduce((s: number, e: any) => s + Number(e.total || 0), 0);
+  const previousDueAmount = previousDueEstimates.reduce((s: number, e: any) => s + (Number(e.total || 0) - Number(e.amountPaid || 0)), 0);
   const previousDue = includePreviousDue ? previousDueAmount : 0;
 
   const total = itemsSubtotal + Number(freightCost || 0) + Number(labourCost || 0) + previousDue;
@@ -554,8 +588,9 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-500">Destination</label>
-                  <input list="destination-names" value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="Place / area" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                  <input list="destination-names" value={destination} onChange={(e) => { setDestination(e.target.value); setDestinationTouched(true); }} placeholder="Place / area" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                   <datalist id="destination-names">{knownDestinations.map((n) => <option key={n} value={n} />)}</datalist>
+                  <p className="mt-1 text-[11px] text-slate-400">Auto-filled from the customer's saved location — edit if this delivery goes elsewhere.</p>
                 </div>
               </div>
             )}
@@ -631,10 +666,133 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
         <StatusChoicePopup
           total={pendingSave.total}
           currency=""
-          onChoose={(status: string) => { onSave({ ...pendingSave, status }); setPendingSave(null); }}
+          onChoose={(status: string, isAdvanceBooking: boolean) => { onSave({ ...pendingSave, status, isAdvanceBooking }); setPendingSave(null); }}
           onCancel={() => setPendingSave(null)}
         />
       )}
+    </div>
+  );
+}
+
+function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
+  if (!doc) return null;
+  const customer = customers.find((c: any) => c.id === doc.customerId);
+  const itemById = (id: string) => items.find((it: any) => it.id === id);
+  const itemsSubtotal = (doc.lines || []).reduce((s: number, ln: any) => s + Number(ln.qty || 0) * Number(ln.rate || 0), 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4">
+      <div className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">{doc.number}</h3>
+            <p className="text-xs text-slate-400">{fmtDate(doc.date)}{doc.dueDate ? ` · Due ${fmtDate(doc.dueDate)}` : ""}</p>
+          </div>
+          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">{customer?.name || "Unknown customer"}</p>
+              {customer?.location && <p className="text-xs text-slate-400">{customer.location}</p>}
+            </div>
+            <Badge status={doc.status} />
+          </div>
+
+          {(doc.contractorName || doc.destination) && (
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {doc.contractorName && <div><p className="text-xs font-semibold text-slate-400">Contractor</p><p className="text-slate-700">{doc.contractorName}</p></div>}
+              {doc.destination && <div><p className="text-xs font-semibold text-slate-400">Destination</p><p className="text-slate-700">{doc.destination}</p></div>}
+            </div>
+          )}
+
+          <div>
+            <p className="mb-2 text-xs font-semibold text-slate-500">Items</p>
+            <div className="space-y-2">
+              {(doc.lines || []).map((ln: any, i: number) => {
+                const it = itemById(ln.itemId);
+                return (
+                  <div key={i} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2 text-sm">
+                    <div>
+                      <p className="font-semibold text-slate-800">{it?.name || ln.name || "Item"}</p>
+                      <p className="text-xs text-slate-400">{ln.qty} × {fmtMoney(ln.rate, currency)}</p>
+                    </div>
+                    <p className="font-semibold text-slate-800">{fmtMoney(Number(ln.qty || 0) * Number(ln.rate || 0), currency)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {doc.notes && (
+            <div>
+              <p className="mb-1 text-xs font-semibold text-slate-500">Notes</p>
+              <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">{doc.notes}</p>
+            </div>
+          )}
+
+          <div className="space-y-1 rounded-xl bg-slate-50 px-4 py-3">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-500"><span>Items subtotal</span><span>{fmtMoney(itemsSubtotal, currency)}</span></div>
+            {Number(doc.freightCost || 0) > 0 && <div className="flex items-center justify-between text-xs text-slate-500"><span>Freight</span><span>{fmtMoney(doc.freightCost, currency)}</span></div>}
+            {Number(doc.labourCost || 0) > 0 && <div className="flex items-center justify-between text-xs text-slate-500"><span>Labour</span><span>{fmtMoney(doc.labourCost, currency)}</span></div>}
+            {Number(doc.previousDue || 0) > 0 && <div className="flex items-center justify-between text-xs text-slate-500"><span>Previous due</span><span>{fmtMoney(doc.previousDue, currency)}</span></div>}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-sm font-semibold text-slate-500">Total</span>
+              <span className="text-lg font-bold text-slate-900">{fmtMoney(doc.total, currency)}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs font-semibold text-emerald-600"><span>Paid</span><span>{fmtMoney(doc.amountPaid, currency)}</span></div>
+            {Number(doc.total || 0) - Number(doc.amountPaid || 0) > 0 && (
+              <div className="flex items-center justify-between text-xs font-semibold text-rose-600"><span>Balance due</span><span>{fmtMoney(Number(doc.total || 0) - Number(doc.amountPaid || 0), currency)}</span></div>
+            )}
+          </div>
+
+          {(doc.returns || []).length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-500">Returns</p>
+              <div className="space-y-1.5">
+                {doc.returns.map((r: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                    <span>{r.name} × {r.qty} ({fmtDate(r.date)})</span>
+                    <span className="font-semibold">-{fmtMoney(r.amount, currency)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(doc.deliveries || []).length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-500">Collections (advance booking)</p>
+              <div className="space-y-1.5">
+                {doc.deliveries.map((d: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    <span>{d.name} × {d.qty}</span>
+                    <span className="text-blue-500">{fmtDate(d.date)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {(doc.history || []).length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-500">History</p>
+              <div className="space-y-2 border-l-2 border-slate-100 pl-3">
+                {[...doc.history].reverse().map((h: any, i: number) => (
+                  <div key={i} className="text-xs">
+                    <p className="font-semibold text-slate-700">{h.action}</p>
+                    <p className="text-slate-400">{fmtDate(h.date)}{h.note ? ` · ${h.note}` : ""}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6">
+          <button onClick={onClose} className="w-full rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-600">Close</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -819,9 +977,9 @@ function ChallanModal({ onClose, onSave }: any) {
 
 /* ---- OrderModal ---- */
 
-function OrderModal({ items, onClose, onSave }: any) {
-  const [itemId, setItemId] = useState(items[0]?.id || "");
-  const [qty, setQty] = useState("1");
+function OrderModal({ items, onClose, onSave, prefill }: any) {
+  const [itemId, setItemId] = useState(prefill?.itemId || items[0]?.id || "");
+  const [qty, setQty] = useState(String(prefill?.qty || "1"));
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState("");
   const canSave = itemId && Number(qty) > 0;
@@ -946,11 +1104,73 @@ function ReturnModal({ doc, items, currency, onClose, onSave }: any) {
 
 /* ---- InvoiceShareModal ---- */
 
+function DeliveryModal({ doc, items, onClose, onSave }: any) {
+  const rows = bookingLineProgress(doc)
+    .filter((r: any) => r.remaining > 0)
+    .map((r: any) => ({ ...r, name: items.find((it: any) => it.id === r.itemId)?.name || "Item" }));
+
+  const [qtyMap, setQtyMap] = useState<Record<string, string>>({});
+  const setQty = (itemId: string, v: string) => setQtyMap((m) => ({ ...m, [itemId]: v }));
+
+  const lines = rows
+    .map((r: any) => ({ ...r, collectQty: Math.min(Number(qtyMap[r.itemId] || 0), r.remaining) }))
+    .filter((r: any) => r.collectQty > 0);
+  const canSave = lines.length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4">
+      <div className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-lg font-bold text-slate-900">Record collection</h3>
+          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <p className="mb-4 text-xs text-slate-500">{doc.number} — enter how many of each booked item the customer is taking right now. Can't exceed what's still remaining.</p>
+
+        {rows.length === 0 ? (
+          <p className="text-sm text-slate-500">Everything booked on this estimate has already been collected.</p>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((r: any) => (
+              <div key={r.itemId} className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{r.name}</p>
+                  <p className="text-xs text-slate-400">
+                    {r.remaining} of {r.booked} remaining
+                    {r.delivered > 0 ? ` · ${r.delivered} collected so far` : ""}
+                  </p>
+                </div>
+                <input
+                  type="number" min="0" max={r.remaining} placeholder="0"
+                  value={qtyMap[r.itemId] || ""} onChange={(e) => setQty(r.itemId, e.target.value)}
+                  className="w-16 rounded-xl border border-slate-200 px-2 py-2 text-sm text-center"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-600">Cancel</button>
+          <button
+            disabled={!canSave}
+            onClick={() => canSave && onSave(lines.map((l: any) => ({ itemId: l.itemId, qty: l.collectQty })))}
+            className="flex-1 rounded-full bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            Record collection
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- InvoiceShareModal ---- */
+
 function InvoiceShareModal({ invoice, customer, items, settings, payment, onClose }: any) {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const isOverdue = invoice.status === "Due" && invoice.dueDate && new Date(invoice.dueDate) < new Date();
-  const statusLabel = invoice.status === "Paid" ? "PAID" : invoice.status === "Accepted" ? "ACCEPTED" : isOverdue ? "OVERDUE" : "DUE";
-  const statusColor = invoice.status === "Paid" ? "#10b981" : invoice.status === "Accepted" ? "#2563eb" : isOverdue ? "#e11d48" : "#d97706";
+  const statusLabel = invoice.status === "Paid" ? "PAID" : invoice.status === "Partially Paid" ? "PARTIALLY PAID" : invoice.status === "Accepted" ? "ACCEPTED" : isOverdue ? "OVERDUE" : "DUE";
+  const statusColor = invoice.status === "Paid" ? "#10b981" : invoice.status === "Partially Paid" ? "#0284c7" : invoice.status === "Accepted" ? "#2563eb" : isOverdue ? "#e11d48" : "#d97706";
 
   useEffect(() => {
     const canvas = document.createElement("canvas");
@@ -1009,6 +1229,10 @@ function InvoiceShareModal({ invoice, customer, items, settings, payment, onClos
     if (invoice.status === "Paid") {
       ctx.fillStyle = "#ecfdf5"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#10b981"; ctx.font = "bold 16px Arial";
       ctx.fillText(`✓ Payment received${payment ? " on " + fmtDate(payment.date) : ""}`, 80, y + 32);
+    } else if (invoice.status === "Partially Paid") {
+      const remaining = Number(invoice.total || 0) - Number(invoice.amountPaid || 0);
+      ctx.fillStyle = "#eff6ff"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#0284c7"; ctx.font = "bold 16px Arial";
+      ctx.fillText(`Partially paid — ${fmtMoney(remaining, settings.currency)} still due`, 80, y + 32);
     } else if (invoice.status === "Accepted") {
       ctx.fillStyle = "#eff6ff"; ctx.fillRect(60, y, W - 120, 50); ctx.fillStyle = "#2563eb"; ctx.font = "bold 16px Arial";
       ctx.fillText(`Accepted — payment due by ${fmtDate(invoice.dueDate)}`, 80, y + 32);
@@ -1024,11 +1248,16 @@ function InvoiceShareModal({ invoice, customer, items, settings, payment, onClos
     setImgUrl(canvas.toDataURL("image/png"));
   }, [invoice, customer, items, settings, payment, isOverdue, statusLabel, statusColor]);
 
+  const remainingDue = Number(invoice.total || 0) - Number(invoice.amountPaid || 0);
   const message = invoice.status === "Paid"
     ? `Hi ${customer?.name || ""}, thank you! Your payment for estimate ${invoice.number} (${fmtMoney(invoice.total, settings.currency)}) has been received.`
+    : invoice.status === "Partially Paid"
+    ? `Hi ${customer?.name || ""}, thanks for your payment on estimate ${invoice.number}. ${fmtMoney(remainingDue, settings.currency)} is still due.`
     : `Hi ${customer?.name || ""}, your estimate ${invoice.number} for ${fmtMoney(invoice.total, settings.currency)} is due on ${fmtDate(invoice.dueDate)}.`;
   const smsMsg = invoice.status === "Paid"
     ? `Hi ${customer?.name || ""}, payment for estimate ${invoice.number} (${fmtMoney(invoice.total, settings.currency)}) received. Thank you! - ${settings.orgName}`
+    : invoice.status === "Partially Paid"
+    ? `Hi ${customer?.name || ""}, payment received on estimate ${invoice.number}. ${fmtMoney(remainingDue, settings.currency)} still due. - ${settings.orgName}`
     : `Hi ${customer?.name || ""}, estimate ${invoice.number} for ${fmtMoney(invoice.total, settings.currency)} due ${fmtDate(invoice.dueDate)}. - ${settings.orgName}`;
 
   return (
@@ -1128,8 +1357,9 @@ function Sidebar({ open, onClose, active, onNav, settings, onSignOut }: any) {
   );
 }
 
-function Topbar({ onMenu, settings, view }: any) {
+function Topbar({ onMenu, settings, view, onOpenSearch }: any) {
   const titleMap: any = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
+  titleMap.customerDetail = "Customer";
   return (
     <div className="sticky top-0 z-20 flex items-center justify-between bg-slate-50/95 backdrop-blur px-5 py-4">
       <div className="flex items-center gap-3">
@@ -1137,8 +1367,110 @@ function Topbar({ onMenu, settings, view }: any) {
         <span className="text-lg font-bold text-slate-900">{view === "dashboard" ? settings.orgName : titleMap[view]}</span>
       </div>
       <div className="flex items-center gap-2">
+        <button onClick={onOpenSearch} className="rounded-full border border-slate-200 bg-white p-2"><Search size={18} className="text-slate-500" /></button>
         <button className="rounded-full border border-slate-200 bg-white p-2"><LifeBuoy size={18} className="text-slate-500" /></button>
         <button className="rounded-full border border-slate-200 bg-white p-2"><Bell size={18} className="text-slate-500" /></button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Global Search ---- */
+
+function GlobalSearchOverlay({ customers, items, estimates, currency, onSelectCustomer, onSelectItem, onSelectEstimate, onClose }: any) {
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+
+  const matchedCustomers = query ? customers.filter((c: any) =>
+    c.name.toLowerCase().includes(query) || (c.location || "").toLowerCase().includes(query) || (c.phone || "").includes(query)
+  ).slice(0, 6) : [];
+
+  const matchedItems = query ? items.filter((it: any) => it.name.toLowerCase().includes(query)).slice(0, 6) : [];
+
+  const matchedEstimates = query ? estimates.filter((e: any) => {
+    const cust = customers.find((c: any) => c.id === e.customerId);
+    return (e.number || "").toLowerCase().includes(query)
+      || (cust?.name || "").toLowerCase().includes(query)
+      || (cust?.location || "").toLowerCase().includes(query)
+      || (e.notes || "").toLowerCase().includes(query);
+  }).slice(0, 6) : [];
+
+  const noResults = query && matchedCustomers.length === 0 && matchedItems.length === 0 && matchedEstimates.length === 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40">
+      <div className="mx-auto max-w-lg bg-white h-full sm:h-auto sm:mt-16 sm:rounded-3xl sm:shadow-xl overflow-y-auto">
+        <div className="sticky top-0 flex items-center gap-2 border-b border-slate-100 bg-white p-4">
+          <Search size={18} className="text-slate-400 shrink-0" />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search customers, items, estimates..."
+            className="flex-1 text-sm focus:outline-none"
+          />
+          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+
+        <div className="p-4 space-y-5">
+          {!query && <p className="text-sm text-slate-400 text-center py-6">Start typing to search across customers, items and estimates.</p>}
+
+          {matchedCustomers.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-400">Customers</p>
+              <div className="space-y-1.5">
+                {matchedCustomers.map((c: any) => (
+                  <button key={c.id} onClick={() => onSelectCustomer(c.id)} className="w-full flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-left">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{c.name}</p>
+                      {c.location && <p className="text-xs text-slate-400">{c.location}</p>}
+                    </div>
+                    <ArrowRight size={14} className="text-slate-300" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {matchedItems.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-400">Items</p>
+              <div className="space-y-1.5">
+                {matchedItems.map((it: any) => (
+                  <button key={it.id} onClick={() => onSelectItem(it.id)} className="w-full flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-left">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{it.name}</p>
+                      <p className="text-xs text-slate-400">Stock: {it.stock ?? 0}</p>
+                    </div>
+                    <ArrowRight size={14} className="text-slate-300" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {matchedEstimates.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-400">Estimates</p>
+              <div className="space-y-1.5">
+                {matchedEstimates.map((e: any) => {
+                  const cust = customers.find((c: any) => c.id === e.customerId);
+                  return (
+                    <button key={e.id} onClick={() => onSelectEstimate(e)} className="w-full flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-left">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{e.number} · {cust?.name || "Unknown"}</p>
+                        <p className="text-xs text-slate-400">{fmtMoney(e.total, currency)}</p>
+                      </div>
+                      <Badge status={e.status} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {noResults && <p className="text-sm text-slate-400 text-center py-6">No matches for "{q}".</p>}
+        </div>
       </div>
     </div>
   );
@@ -1149,7 +1481,9 @@ function Topbar({ onMenu, settings, view }: any) {
 function Dashboard({ data, settings, openModal, go }: any) {
   const { customers, estimates, expenses, items, payments } = data;
   const [tab, setTab] = useState("estimates");
-  const outstanding = estimates.filter((i: any) => i.status !== "Paid").reduce((s: number, i: any) => s + i.total, 0);
+  const outstanding = estimates.filter((i: any) => i.status !== "Paid").reduce((s: number, i: any) => s + (Number(i.total || 0) - Number(i.amountPaid || 0)), 0);
+  const overdueEstimates = estimates.filter((i: any) => i.status !== "Paid" && i.dueDate && new Date(i.dueDate) < new Date());
+  const overdueAmount = overdueEstimates.reduce((s: number, i: any) => s + (Number(i.total || 0) - Number(i.amountPaid || 0)), 0);
   const byCategory: any = {};
   expenses.forEach((e: any) => { byCategory[e.category] = (byCategory[e.category] || 0) + Number(e.amount); });
   const catEntries = Object.entries(byCategory) as [string, number][];
@@ -1201,11 +1535,27 @@ function Dashboard({ data, settings, openModal, go }: any) {
       <p className="-mt-3 text-sm text-slate-400">Here's your organization's overview</p>
 
       {lowStockItems.length > 0 && (
-        <div className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-amber-500 mt-0.5 shrink-0" />
-          <div>
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-amber-500 mt-0.5 shrink-0" />
             <p className="text-sm font-bold text-amber-800">Low stock alert</p>
-            <p className="text-xs text-amber-700 mt-0.5">{lowStockItems.map((it: any) => `${it.name} (${it.stock ?? 0} left)`).join(", ")}</p>
+          </div>
+          <div className="mt-2 space-y-1.5">
+            {lowStockItems.map((it: any) => {
+              const threshold = it.lowStock ?? LOW_STOCK_DEFAULT;
+              const suggestedQty = Math.max(1, threshold * 2 - (it.stock ?? 0));
+              return (
+                <div key={it.id} className="flex items-center justify-between rounded-xl bg-white/60 px-3 py-2">
+                  <p className="text-xs font-semibold text-amber-800">{it.name} ({it.stock ?? 0} left)</p>
+                  <button
+                    onClick={() => openModal("order", { itemId: it.id, qty: suggestedQty })}
+                    className="rounded-full bg-amber-600 px-3 py-1 text-[11px] font-semibold text-white"
+                  >
+                    Reorder
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1227,6 +1577,17 @@ function Dashboard({ data, settings, openModal, go }: any) {
         <p className="mt-3 text-2xl font-bold text-slate-900">{fmtMoney(outstanding, settings.currency)}</p>
         <PillButton className="mt-4" onClick={() => openModal("estimate")}><Plus size={16} /> Create Estimate</PillButton>
       </Card>
+
+      {overdueEstimates.length > 0 && (
+        <Card className="border border-rose-100 bg-rose-50/40">
+          <div className="flex items-center gap-2 text-rose-700">
+            <AlertCircle size={16} /> <h3 className="text-base font-bold">Overdue</h3>
+          </div>
+          <p className="mt-1 text-sm text-rose-600">{overdueEstimates.length} estimate{overdueEstimates.length !== 1 ? "s" : ""} past due date.</p>
+          <p className="mt-3 text-2xl font-bold text-rose-700">{fmtMoney(overdueAmount, settings.currency)}</p>
+          <PillButton className="mt-4 !bg-rose-600" onClick={() => go("estimates")}>View overdue estimates</PillButton>
+        </Card>
+      )}
 
       <Card>
         <div className="mb-3 flex items-center gap-2 text-slate-700">
@@ -1316,7 +1677,12 @@ function Dashboard({ data, settings, openModal, go }: any) {
 
 /* ---- Customers ---- */
 
-function CustomersView({ customers, openModal, removeCustomer }: any) {
+function CustomersView({ customers, openModal, removeCustomer, estimates, onSelectCustomer }: any) {
+  const balanceFor = (customerId: string) =>
+    (estimates || [])
+      .filter((e: any) => String(e.customerId) === String(customerId))
+      .reduce((s: number, e: any) => s + (Number(e.total || 0) - Number(e.amountPaid || 0)), 0);
+
   return (
     <div className="space-y-3 px-5 pb-28">
       <div className="flex items-center justify-between pt-1">
@@ -1325,29 +1691,137 @@ function CustomersView({ customers, openModal, removeCustomer }: any) {
       </div>
       {customers.length === 0
         ? <Card><EmptyState text="Add your first customer." cta="New Customer" onCta={() => openModal("customer")} /></Card>
-        : customers.map((c: any) => (
-          <Card key={c.id} className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-slate-900">{c.name}</p>
-              <p className="text-xs text-slate-400">{c.email || "No email"}{c.phone ? ` · ${c.phone}` : ""}</p>
-              {c.location && (
-                <a
-                  href={c.lat && c.lng ? `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.location)}`}
-                  target="_blank" rel="noreferrer"
-                  className="mt-0.5 flex items-center gap-1 text-xs text-slate-400 hover:text-blue-500 hover:underline"
-                >
-                  <MapPin size={11} /> {c.location}
-                </a>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <WhatsAppButton phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
-              <SmsButton phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
-              <button onClick={() => removeCustomer(c.id)} className="rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={16} /></button>
-            </div>
-          </Card>
-        ))
+        : customers.map((c: any) => {
+          const balance = balanceFor(c.id);
+          return (
+            <Card key={c.id} className="flex items-center justify-between cursor-pointer" onClick={() => onSelectCustomer(c.id)}>
+              <div>
+                <p className="font-semibold text-slate-900">{c.name}</p>
+                <p className="text-xs text-slate-400">{c.email || "No email"}{c.phone ? ` · ${c.phone}` : ""}</p>
+                {c.location && (
+                  <a
+                    href={c.lat && c.lng ? `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.location)}`}
+                    target="_blank" rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-0.5 flex items-center gap-1 text-xs text-slate-400 hover:text-blue-500 hover:underline"
+                  >
+                    <MapPin size={11} /> {c.location}
+                  </a>
+                )}
+                {balance > 0 && <p className="mt-1 text-xs font-semibold text-rose-600">Due {fmtMoney(balance, "₹")}</p>}
+              </div>
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <WhatsAppButton phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
+                <SmsButton phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
+                <button onClick={() => removeCustomer(c.id)} className="rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={16} /></button>
+              </div>
+            </Card>
+          );
+        })
       }
+    </div>
+  );
+}
+
+/* ---- Customer Ledger / Detail ---- */
+
+function CustomerDetailView({ customer, estimates, payments, currency, onBack }: any) {
+  if (!customer) {
+    return (
+      <div className="px-5 pb-28 pt-1">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm font-semibold text-slate-500"><ChevronLeft size={16} /> Back</button>
+        <Card className="mt-3"><EmptyState text="Customer not found." /></Card>
+      </div>
+    );
+  }
+
+  const custEstimates = (estimates || [])
+    .filter((e: any) => String(e.customerId) === String(customer.id))
+    .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
+  const custPayments = (payments || [])
+    .filter((p: any) => String(p.customerId) === String(customer.id))
+    .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
+
+  const balance = custEstimates.reduce((s: number, e: any) => s + (Number(e.total || 0) - Number(e.amountPaid || 0)), 0);
+  const overdueEstimates = custEstimates.filter((e: any) => e.status !== "Paid" && e.dueDate && new Date(e.dueDate) < new Date());
+
+  return (
+    <div className="space-y-4 px-5 pb-28 pt-1">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm font-semibold text-slate-500"><ChevronLeft size={16} /> Back</button>
+
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-lg font-bold text-slate-900">{customer.name}</p>
+            <p className="text-xs text-slate-400">{customer.email || "No email"}{customer.phone ? ` · ${customer.phone}` : ""}</p>
+            {customer.location && (
+              <a
+                href={customer.lat && customer.lng ? `https://www.google.com/maps/search/?api=1&query=${customer.lat},${customer.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.location)}`}
+                target="_blank" rel="noreferrer"
+                className="mt-1 flex items-center gap-1 text-xs text-slate-400 hover:text-blue-500 hover:underline"
+              >
+                <MapPin size={11} /> {customer.location}
+              </a>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <WhatsAppButton phone={customer.phone} message={`Hi ${customer.name}, reaching out from ${customer.name}'s account.`} />
+            <SmsButton phone={customer.phone} message={`Hi ${customer.name}, reaching out from ${customer.name}'s account.`} />
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <p className="text-sm font-semibold text-slate-400">Balance due</p>
+        <p className={`mt-1 text-2xl font-bold ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>{fmtMoney(balance, currency)}</p>
+        {overdueEstimates.length > 0 && (
+          <p className="mt-1 text-xs font-semibold text-amber-600">{overdueEstimates.length} overdue estimate{overdueEstimates.length !== 1 ? "s" : ""}</p>
+        )}
+      </Card>
+
+      <div>
+        <h3 className="mb-2 text-sm font-bold text-slate-700">Estimates ({custEstimates.length})</h3>
+        {custEstimates.length === 0 ? (
+          <Card><EmptyState text="No estimates yet." /></Card>
+        ) : (
+          <div className="space-y-2">
+            {custEstimates.map((e: any) => {
+              const overdue = e.status !== "Paid" && e.dueDate && new Date(e.dueDate) < new Date();
+              return (
+                <Card key={e.id} className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-slate-800">{e.number}</p>
+                    <p className="text-xs text-slate-400">{fmtDate(e.date)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-slate-800">{fmtMoney(e.total, currency)}</p>
+                    <Badge status={overdue ? "Overdue" : e.status} />
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-bold text-slate-700">Payments ({custPayments.length})</h3>
+        {custPayments.length === 0 ? (
+          <Card><EmptyState text="No payments yet." /></Card>
+        ) : (
+          <div className="space-y-2">
+            {custPayments.map((p: any) => (
+              <Card key={p.id} className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-800">{p.invoiceNumber || "—"}</p>
+                  <p className="text-xs text-slate-400">{fmtDate(p.date)}{p.method ? ` · ${p.method}` : ""}</p>
+                </div>
+                <p className={`font-bold ${Number(p.amount) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{fmtMoney(p.amount, currency)}</p>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1406,6 +1880,7 @@ function ItemsView({ items, openModal, removeItem, currency }: any) {
                   <p className="text-xs text-slate-400">Sell: <span className="font-bold text-slate-800">{fmtMoney(it.sellingPrice ?? it.price, currency)}</span></p>
                   {it.purchasePrice > 0 && <p className="text-xs text-slate-400">Buy: <span className="font-semibold text-slate-600">{fmtMoney(it.purchasePrice, currency)}</span></p>}
                 </div>
+                <button onClick={() => openModal("item", { editingItem: it })} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><Pencil size={16} /></button>
                 <button onClick={() => removeItem(it.id)} className="rounded-full p-2 text-rose-400 hover:bg-rose-50"><Trash2 size={16} /></button>
               </div>
             </Card>
@@ -1419,9 +1894,12 @@ function ItemsView({ items, openModal, removeItem, currency }: any) {
 /* ---- Orders ---- */
 
 function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }: any) {
+  const [category, setCategory] = useState("All");
   const itemName = (id: string) => items.find((it: any) => it.id === id)?.name || "Unknown item";
-  const pending = orders.filter((o: any) => o.status === "Pending");
-  const received = orders.filter((o: any) => o.status === "Received");
+  const itemCategory = (id: string) => items.find((it: any) => it.id === id)?.category || "Others";
+  const categoryFiltered = category === "All" ? orders : orders.filter((o: any) => itemCategory(o.itemId) === category);
+  const pending = categoryFiltered.filter((o: any) => o.status === "Pending");
+  const received = categoryFiltered.filter((o: any) => o.status === "Received");
 
   return (
     <div className="space-y-3 px-5 pb-28">
@@ -1429,9 +1907,16 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
         <p className="text-sm text-slate-400">{orders.length} order{orders.length !== 1 ? "s" : ""}</p>
         <PillButton onClick={() => openModal("order")}><Plus size={16} /> New Order</PillButton>
       </div>
+      <div className="flex flex-wrap gap-2">
+        {["All", ...ITEM_CATEGORIES].map((c) => (
+          <button key={c} onClick={() => setCategory(c)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${category === c ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"}`}>{c}</button>
+        ))}
+      </div>
 
       {orders.length === 0
         ? <Card><EmptyState text="Place orders to restock your inventory. Marking an order as Received will automatically update the item's stock." cta="New Order" onCta={() => openModal("order")} /></Card>
+        : pending.length === 0 && received.length === 0
+        ? <Card><p className="text-center text-sm text-slate-400">No orders match this category.</p></Card>
         : (
           <>
             {pending.length > 0 && (
@@ -1483,7 +1968,7 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
 
 /* ---- DocumentList ---- */
 
-function DocumentList({ type, docs, customers, currency, openModal, removeDoc, updateStatus, recordPayment, onShareInvoice, onPrint, onEdit, onReturn }: any) {
+function DocumentList({ type, docs, customers, items, currency, openModal, removeDoc, updateStatus, recordPayment, onShareInvoice, onPrint, onView, onReturn, onDeliver }: any) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all | due | paid | returned
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
@@ -1507,7 +1992,13 @@ function DocumentList({ type, docs, customers, currency, openModal, removeDoc, u
   if (type === "estimate") {
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      visibleDocs = visibleDocs.filter((d: any) => (d.notes || "").toLowerCase().includes(q));
+      visibleDocs = visibleDocs.filter((d: any) => {
+        const cust = customers.find((c: any) => c.id === d.customerId);
+        const name = (cust?.name || "").toLowerCase();
+        const location = (cust?.location || "").toLowerCase();
+        const notes = (d.notes || "").toLowerCase();
+        return name.includes(q) || location.includes(q) || notes.includes(q);
+      });
     }
     if (statusFilter === "due") visibleDocs = visibleDocs.filter((d: any) => d.status !== "Paid");
     else if (statusFilter === "paid") visibleDocs = visibleDocs.filter((d: any) => d.status === "Paid");
@@ -1572,19 +2063,54 @@ function DocumentList({ type, docs, customers, currency, openModal, removeDoc, u
     return (
       <Card key={d.id}>
         <div className="flex items-start justify-between">
-          <div><p className="font-semibold text-slate-900">{d.number}</p><p className="text-xs text-slate-400">{customerName(d.customerId)} · {fmtDate(d.date)}</p></div>
-          <Badge status={displayStatus} />
+          <div>
+            <p className="font-semibold text-slate-900">{d.number}</p>
+            <p className="text-xs text-slate-400">{customerName(d.customerId)} · {fmtDate(d.date)}</p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <Badge status={displayStatus} />
+            {type === "estimate" && d.isAdvanceBooking && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Advance Booking</span>
+            )}
+          </div>
         </div>
         <p className="mt-3 text-lg font-bold text-slate-900">{fmtMoney(d.total, currency)}</p>
+        {type === "estimate" && d.status !== "Due" && Number(d.amountPaid || 0) > 0 && (
+          <p className="mt-0.5 text-xs text-slate-500">
+            Paid {fmtMoney(d.amountPaid, currency)}
+            {d.status !== "Paid" && <span className="text-amber-600 font-semibold"> · {fmtMoney(Number(d.total || 0) - Number(d.amountPaid || 0), currency)} due</span>}
+          </p>
+        )}
         {type === "estimate" && d.notes && <p className="mt-1 text-xs text-slate-400 line-clamp-2">📝 {d.notes}</p>}
+        {type === "estimate" && d.isAdvanceBooking && (() => {
+          const rows = bookingLineProgress(d);
+          const pending = rows.filter((r: any) => r.remaining > 0);
+          if (rows.length === 0) return null;
+          const itemName = (id: string) => items?.find?.((it: any) => it.id === id)?.name;
+          return (
+            <div className="mt-2 rounded-xl bg-blue-50 px-3 py-2">
+              <p className="text-xs font-semibold text-blue-700 mb-1">{pending.length > 0 ? "Advance booking — collection pending" : "Advance booking — fully collected"}</p>
+              {pending.length > 0 && (
+                <div className="space-y-0.5">
+                  {pending.map((r: any) => (
+                    <p key={r.itemId} className="text-xs text-blue-600">
+                      {itemName(r.itemId) || "Item"}: {r.remaining} of {r.booked} remaining{r.delivered > 0 ? ` (${r.delivered} collected)` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {type !== "challan" && (
             <select value={d.status} onChange={(e) => updateStatus(d.id, e.target.value)} className="rounded-full border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
-              {["Accepted","Due","Paid"].map((s) => <option key={s} value={s}>{s}</option>)}
+              {["Accepted","Due","Partially Paid","Paid"].map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
-          {type === "estimate" && <GhostButton onClick={() => onEdit(d)}><Pencil size={13} /> Edit</GhostButton>}
+          {type === "estimate" && <GhostButton onClick={() => onView(d)}><Eye size={13} /> View</GhostButton>}
           {type === "estimate" && d.status !== "Paid" && <GhostButton onClick={() => recordPayment(d)}><CheckCircle2 size={13} /> Record payment</GhostButton>}
+          {type === "estimate" && d.isAdvanceBooking && (d.lines || []).length > 0 && !isFullyCollected(d) && <GhostButton onClick={() => onDeliver(d)}><Truck size={13} /> Record collection</GhostButton>}
           {type === "estimate" && (d.lines || []).length > 0 && <GhostButton onClick={() => onReturn(d)}><RotateCcw size={13} /> Return items</GhostButton>}
           {type === "estimate" && <GhostButton onClick={() => onPrint(d)}><Printer size={13} /> Print</GhostButton>}
           {type === "estimate"
@@ -1610,7 +2136,7 @@ function DocumentList({ type, docs, customers, currency, openModal, removeDoc, u
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search estimates by notes..."
+              placeholder="Search by customer, location or notes..."
               className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
             />
           </div>
@@ -1974,11 +2500,13 @@ function LabourTrackingView({ sessions, knownWorkers, onSave, onRemove, currency
   );
 }
 
-function ToDoTrackingView({ items, settings }: any) {
+function ToDoTrackingView({ items, settings, openModal }: any) {
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [category, setCategory] = useState("All");
 
   const lowItems = items.filter((it: any) => (it.stock ?? 0) <= (it.lowStock ?? LOW_STOCK_DEFAULT));
-  const allItems = [...items].sort((a: any, b: any) => (a.stock ?? 0) - (b.stock ?? 0));
+  const categoryFiltered = category === "All" ? items : items.filter((it: any) => (it.category || "Others") === category);
+  const allItems = [...categoryFiltered].sort((a: any, b: any) => (a.stock ?? 0) - (b.stock ?? 0));
 
   const stockColor = (it: any) => {
     const s = it.stock ?? 0;
@@ -2035,9 +2563,12 @@ function ToDoTrackingView({ items, settings }: any) {
                   <p className="font-semibold text-slate-900">{it.name}</p>
                   <p className="text-xs text-slate-500">{it.unit || "unit"} · Alert threshold: {it.lowStock ?? LOW_STOCK_DEFAULT}</p>
                 </div>
-                <div className="text-right">
-                  <p className={`text-xl font-bold ${(it.stock ?? 0) === 0 ? "text-rose-600" : "text-amber-600"}`}>{it.stock ?? 0}</p>
-                  <p className="text-xs text-slate-400">in stock</p>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <p className={`text-xl font-bold ${(it.stock ?? 0) === 0 ? "text-rose-600" : "text-amber-600"}`}>{it.stock ?? 0}</p>
+                    <p className="text-xs text-slate-400">in stock</p>
+                  </div>
+                  <button onClick={() => openModal("item", { editingItem: it })} className="rounded-full p-2 text-slate-400 hover:bg-white"><Pencil size={15} /></button>
                 </div>
               </li>
             ))}
@@ -2064,19 +2595,29 @@ function ToDoTrackingView({ items, settings }: any) {
 
         {inventoryOpen && (
           <div className="mt-4">
+            <div className="mb-3 flex flex-wrap gap-2">
+              {["All", ...ITEM_CATEGORIES].map((c) => (
+                <button key={c} onClick={() => setCategory(c)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${category === c ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"}`}>{c}</button>
+              ))}
+            </div>
             {items.length === 0 ? (
               <p className="text-sm text-slate-400">No items added yet. Go to Items to add your first product.</p>
+            ) : allItems.length === 0 ? (
+              <p className="text-sm text-slate-400">No items match this category.</p>
             ) : (
               <ul className="space-y-2">
                 {allItems.map((it: any) => (
                   <li key={it.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-2.5">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{it.name}</p>
-                      <p className="text-xs text-slate-400">{it.unit || "unit"}</p>
+                      <p className="text-xs text-slate-400">{it.unit || "unit"} · {it.category || "Others"}</p>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-base font-bold ${stockColor(it)}`}>{it.stock ?? 0}</p>
-                      <p className="text-xs text-slate-400">/ alert ≤{it.lowStock ?? LOW_STOCK_DEFAULT}</p>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <p className={`text-base font-bold ${stockColor(it)}`}>{it.stock ?? 0}</p>
+                        <p className="text-xs text-slate-400">/ alert ≤{it.lowStock ?? LOW_STOCK_DEFAULT}</p>
+                      </div>
+                      <button onClick={() => openModal("item", { editingItem: it })} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><Pencil size={15} /></button>
                     </div>
                   </li>
                 ))}
@@ -2175,7 +2716,7 @@ function EstimatesMapCard({ invoices, currency }: any) {
 }
 
 function ReportsView({ data, currency, settings }: any) {
-  const { invoices, payments, expenses, customers, labourSessions } = data;
+  const { invoices, payments, expenses, customers, labourSessions, items } = data;
   const [nameQuery, setNameQuery] = useState("");
   const [locationQuery, setLocationQuery] = useState("");
   const [fromDate, setFromDate] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
@@ -2183,11 +2724,44 @@ function ReportsView({ data, currency, settings }: any) {
   const totalInvoiced = invoices.reduce((s: number, i: any) => s + i.total, 0);
   const totalReceived = payments.reduce((s: number, p: any) => s + Number(p.amount), 0);
   const totalExpenses = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
-  const outstanding = invoices.filter((i: any) => i.status !== "Paid").reduce((s: number, i: any) => s + i.total, 0);
+  const outstanding = invoices.filter((i: any) => i.status !== "Paid").reduce((s: number, i: any) => s + (Number(i.total || 0) - Number(i.amountPaid || 0)), 0);
   const rangeLabour = (labourSessions || []).filter((s: any) => s.date >= fromDate && s.date <= toDate);
   const rangeLabourTotal = rangeLabour.reduce((s: number, x: any) => s + Number(x.total || 0), 0);
   const statusCounts: Record<string, number> = {};
   invoices.forEach((i: any) => { statusCounts[i.status] = (statusCounts[i.status] || 0) + 1; });
+
+  // Real gross margin: revenue minus cost-of-goods-sold, using each item's purchasePrice —
+  // distinct from "netProfit" below, which is just cash collected minus overhead expenses
+  // and says nothing about what the goods actually cost to buy.
+  const itemById = (id: string) => items.find((it: any) => it.id === id);
+  const itemStats = new Map<string, { name: string; qtySold: number; revenue: number; cost: number }>();
+  const bumpItem = (itemId: string, name: string, qty: number, revenue: number, cost: number) => {
+    const key = itemId || "unknown";
+    const cur = itemStats.get(key) || { name: name || "Unknown item", qtySold: 0, revenue: 0, cost: 0 };
+    cur.qtySold += qty; cur.revenue += revenue; cur.cost += cost;
+    if (name) cur.name = name;
+    itemStats.set(key, cur);
+  };
+  for (const inv of invoices) {
+    for (const ln of inv.lines || []) {
+      const it = itemById(ln.itemId);
+      const qty = Number(ln.qty || 0), rate = Number(ln.rate || 0), pp = Number(it?.purchasePrice || 0);
+      bumpItem(ln.itemId, it?.name, qty, qty * rate, qty * pp);
+    }
+    for (const ret of inv.returns || []) {
+      const it = itemById(ret.itemId);
+      const qty = Number(ret.qty || 0), revBack = Number(ret.amount || qty * Number(ret.rate || 0)), pp = Number(it?.purchasePrice || 0);
+      bumpItem(ret.itemId, ret.name || it?.name, -qty, -revBack, -qty * pp);
+    }
+  }
+  const itemProfitability = Array.from(itemStats.entries())
+    .map(([itemId, s]) => ({ itemId, ...s, margin: s.revenue - s.cost }))
+    .sort((a, b) => b.margin - a.margin);
+  const costOfGoodsSold = itemProfitability.reduce((s, i) => s + i.cost, 0);
+  const itemRevenue = itemProfitability.reduce((s, i) => s + i.revenue, 0);
+  const grossProfit = itemRevenue - costOfGoodsSold;
+  const grossMarginPercent = itemRevenue ? (grossProfit / itemRevenue) * 100 : 0;
+
   const stats = [
     { label: "Total Invoiced", value: totalInvoiced, color: "text-blue-600" },
     { label: "Total Received", value: totalReceived, color: "text-emerald-600" },
@@ -2263,6 +2837,32 @@ function ReportsView({ data, currency, settings }: any) {
       <div className="grid grid-cols-2 gap-3">
         {stats.map((s) => (<Card key={s.label}><p className="text-xs font-semibold text-slate-400">{s.label}</p><p className={`mt-1 text-xl font-bold ${s.color}`}>{fmtMoney(s.value, currency)}</p></Card>))}
       </div>
+
+      <Card className="border border-emerald-100 bg-emerald-50/40">
+        <p className="text-xs font-semibold text-emerald-700">Gross Profit (revenue − cost of goods sold)</p>
+        <p className="mt-1 text-2xl font-bold text-emerald-700">{fmtMoney(grossProfit, currency)}</p>
+        <p className="mt-1 text-xs text-emerald-600">{grossMarginPercent.toFixed(1)}% margin · Cost of goods sold: {fmtMoney(costOfGoodsSold, currency)}</p>
+        <p className="mt-2 text-xs text-slate-400">This is different from "Total Received − Total Expenses" — it accounts for what your items actually cost to buy, not just cash overhead.</p>
+      </Card>
+
+      {itemProfitability.length > 0 && (
+        <Card>
+          <h3 className="mb-3 text-base font-bold text-slate-900">Item profitability</h3>
+          <div className="space-y-2">
+            {itemProfitability.slice(0, 10).map((it) => (
+              <div key={it.itemId} className="flex items-center justify-between border-b border-slate-50 pb-2 last:border-0 last:pb-0">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{it.name}</p>
+                  <p className="text-xs text-slate-400">{it.qtySold} sold · Revenue {fmtMoney(it.revenue, currency)}</p>
+                </div>
+                <p className={`text-sm font-bold ${it.margin >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{fmtMoney(it.margin, currency)}</p>
+              </div>
+            ))}
+          </div>
+          {itemProfitability.length > 10 && <p className="mt-2 text-xs text-slate-400">Showing top 10 of {itemProfitability.length} items.</p>}
+        </Card>
+      )}
+
       <Card>
         <h3 className="mb-3 text-base font-bold text-slate-900">Estimates by status</h3>
         {Object.keys(statusCounts).length === 0 ? <p className="text-sm text-slate-400">No estimates yet.</p>
@@ -2733,6 +3333,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   });
 
   const [customers, setCustomers] = useState<any[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [estimates, setEstimates] = useState<any[]>([]);
@@ -2819,14 +3421,21 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
 
   const saveItem = async (v: any) => {
     const normName = (s: string) => (s || "").trim().toLowerCase();
-    const isDuplicate = items.some((it) => normName(it.name) === normName(v.name));
+    const isDuplicate = items.some((it) => it.id !== v.id && normName(it.name) === normName(v.name));
     if (isDuplicate) { showToast("An item with this name already exists"); return; }
     try {
-      const doc = await api.items.create(v);
-      setItems((c) => [doc, ...c]);
-      showToast("Item added");
+      if (v.id) {
+        const { id, ...rest } = v;
+        const doc = await api.items.update(id, rest);
+        setItems((c) => c.map((x) => (x.id === id ? doc : x)));
+        showToast("Item updated");
+      } else {
+        const doc = await api.items.create(v);
+        setItems((c) => [doc, ...c]);
+        showToast("Item added");
+      }
       closeModal();
-    } catch (err) { onApiError(err, "Failed to add item"); }
+    } catch (err) { onApiError(err, "Failed to save item"); }
   };
 
   const removeItem = async (id: string) => {
@@ -2861,6 +3470,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
         payload.contractorName = v.contractorName || "";
         payload.destination = v.destination || "";
         if (v.status) payload.status = v.status; // Due/Paid choice from the confirmation popup, create-only
+        if (v.isAdvanceBooking) payload.isAdvanceBooking = true; // only true when "Advance Booking" was picked in that popup
       }
 
       if (v.id) {
@@ -2901,17 +3511,17 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
 
   const updateDocStatus = (type: string) => async (id: string, s: string) => {
     try {
-      await api.documents(type as any).updateStatus(id, s);
-      docSetter(type)((list: any[]) => list.map((x) => (x.id === id ? { ...x, status: s } : x)));
+      const doc = await api.documents(type as any).updateStatus(id, s);
+      docSetter(type)((list: any[]) => list.map((x) => (x.id === id ? doc : x)));
     } catch (err) { onApiError(err, "Failed to update status"); }
   };
 
   const savePayment = async (v: any) => {
     try {
-      const doc = await api.payments.create(v);
-      setPayments((p) => [doc, ...p]);
-      if (v.invoiceId) setEstimates((list) => list.map((i) => (i.id === v.invoiceId ? { ...i, status: "Paid" } : i)));
-      showToast("Payment recorded");
+      const { payment, invoice } = await api.payments.create(v);
+      setPayments((p) => [payment, ...p]);
+      if (invoice) setEstimates((list) => list.map((i) => (i.id === invoice.id ? invoice : i)));
+      showToast(invoice?.status === "Paid" ? "Payment recorded — estimate fully paid" : invoice?.status === "Partially Paid" ? "Partial payment recorded" : "Payment recorded");
       closeModal();
     } catch (err) { onApiError(err, "Failed to record payment"); }
   };
@@ -2927,9 +3537,22 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     } catch (err) { onApiError(err, "Failed to record return"); }
   };
 
+  const saveDelivery = async (docId: string, lines: { itemId: string; qty: number }[]) => {
+    try {
+      const { doc } = await api.documents("estimate").addDelivery(docId, lines);
+      setEstimates((list) => list.map((e) => (e.id === docId ? doc : e)));
+      const totalQty = lines.reduce((s, l) => s + Number(l.qty || 0), 0);
+      showToast(`Collection recorded: ${totalQty} item${totalQty !== 1 ? "s" : ""} taken`);
+      closeModal();
+    } catch (err) { onApiError(err, "Failed to record collection"); }
+  };
+
   const removePayment = async (id: string) => {
-    try { await api.payments.remove(id); setPayments((c) => c.filter((x) => x.id !== id)); }
-    catch (err) { onApiError(err, "Failed to delete payment"); }
+    try {
+      const { invoice } = await api.payments.remove(id);
+      setPayments((c) => c.filter((x) => x.id !== id));
+      if (invoice) setEstimates((list) => list.map((i) => (i.id === invoice.id ? invoice : i)));
+    } catch (err) { onApiError(err, "Failed to delete payment"); }
   };
 
   const saveOrder = async (v: any) => {
@@ -2956,7 +3579,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   };
 
   const openModal = (type: string, payload?: any) => setModal({ type, payload });
-  const recordPaymentFor = (invoice: any) => openModal("payment", { invoiceId: invoice.id, customerId: invoice.customerId, amount: invoice.total });
+  const recordPaymentFor = (invoice: any) => openModal("payment", { invoiceId: invoice.id, customerId: invoice.customerId, amount: Number(invoice.total || 0) - Number(invoice.amountPaid || 0) });
 
   const saveLabourSession = async (v: any) => {
     try {
@@ -2996,6 +3619,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
 
     const statusNote = invoice.status === "Paid"
       ? "PAID"
+      : invoice.status === "Partially Paid"
+      ? `Partially paid — ${fmtMoney(Number(invoice.total || 0) - Number(invoice.amountPaid || 0), settings.currency)} due`
       : invoice.status === "Accepted"
       ? `Accepted — due ${fmtDate(invoice.dueDate)}`
       : `Due ${fmtDate(invoice.dueDate)}`;
@@ -3053,7 +3678,12 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   const renderView = () => {
     switch (view) {
       case "dashboard": return <Dashboard data={data} settings={settings} openModal={openModal} go={setView} />;
-      case "customers": return <CustomersView customers={customers} openModal={openModal} removeCustomer={removeCustomer} />;
+      case "customers": return <CustomersView customers={customers} estimates={estimates} openModal={openModal} removeCustomer={removeCustomer}
+        onSelectCustomer={(id: string) => { setSelectedCustomerId(id); setView("customerDetail"); }} />;
+      case "customerDetail": return <CustomerDetailView
+        customer={customers.find((c: any) => c.id === selectedCustomerId)}
+        estimates={estimates} payments={payments} currency={settings.currency}
+        onBack={() => setView("customers")} />;
       case "items":     return <ItemsView items={items} openModal={openModal} currency={settings.currency} removeItem={removeItem} />;
       case "orders":    return <OrdersView orders={orders} items={items} openModal={openModal} markOrderReceived={markOrderReceived} removeOrder={removeOrder} />;
       case "challans":  return <DocumentList type="challan" docs={challans} customers={customers} currency={settings.currency} openModal={openModal} removeDoc={removeDoc("challan")} updateStatus={updateDocStatus("challan")} />;
@@ -3065,18 +3695,18 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
             <button onClick={togglePrintSide} className="font-semibold text-blue-600">Switch side ⇄</button>
           </div>
           <div className="-mx-5">
-            <DocumentList type="estimate" docs={estimates} customers={customers} currency={settings.currency} openModal={openModal}
+            <DocumentList type="estimate" docs={estimates} customers={customers} items={items} currency={settings.currency} openModal={openModal}
               removeDoc={removeDoc("estimate")}
               updateStatus={updateDocStatus("estimate")}
-              recordPayment={recordPaymentFor} onReturn={(doc: any) => openModal("return", { doc })} onShareInvoice={(inv: any) => setShareInvoice(inv)}
+              recordPayment={recordPaymentFor} onReturn={(doc: any) => openModal("return", { doc })} onDeliver={(doc: any) => openModal("delivery", { doc })} onShareInvoice={(inv: any) => setShareInvoice(inv)}
               onPrint={printEstimate}
-              onEdit={(doc: any) => openModal("estimate", { editingDoc: doc })} />
+              onView={(doc: any) => openModal("viewEstimate", { doc })} />
           </div>
         </div>
       );
       case "payments":  return <PaymentsView payments={payments} customers={customers} currency={settings.currency} openModal={openModal} removePayment={removePayment} />;
       case "expenses":  return <ExpensesView expenses={expenses} currency={settings.currency} openModal={openModal} removeExpense={removeExpense} />;
-      case "todo":      return <ToDoTrackingView items={items} settings={settings} />;
+      case "todo":      return <ToDoTrackingView items={items} settings={settings} openModal={openModal} />;
       case "labour":    return <LabourTrackingView sessions={labourSessions} knownWorkers={labourWorkers} onSave={saveLabourSession} onRemove={removeLabourSession} currency={settings.currency} />;
       case "contractors": return <ContractorScorecardView estimates={estimates} items={items} currency={settings.currency} />;
       case "reports":      return <ReportsView data={data} currency={settings.currency} settings={settings} />;
@@ -3091,6 +3721,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   const renderModal = () => {
     if (!modal) return null;
     const { type, payload } = modal;
+    if (type === "viewEstimate") return <ViewEstimateModal doc={payload?.doc} customers={customers} items={items} currency={settings.currency} onClose={closeModal} />;
+
     if (type === "customer") return <FieldModal title="New Customer" fields={[
       { key: "name",     label: "Customer name",                     required: true, placeholder: "Acme Co." },
       { key: "email",    label: "Email",                             placeholder: "name@example.com" },
@@ -3098,15 +3730,22 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       { key: "location", label: "Location / Address",                type: "location", placeholder: "City, area or full address" },
     ]} onClose={closeModal} onSave={saveCustomer} />;
 
-    if (type === "item") return <FieldModal title="New Item" fields={[
-      { key: "name",          label: "Item name",           required: true, placeholder: "Web design service" },
-      { key: "category",      label: "Category",            type: "select", options: ITEM_CATEGORIES.map((c) => ({ value: c, label: c })), required: true },
-      { key: "sellingPrice",  label: "Selling price",       type: "number", required: true, placeholder: "0.00" },
-      { key: "purchasePrice", label: "Purchase price",      type: "number", placeholder: "0.00" },
-      { key: "unit",          label: "Unit",                placeholder: "hr / pc / job" },
-      { key: "stock",         label: "Opening stock (qty)", type: "number", placeholder: "0" },
-      { key: "lowStock",      label: "Low stock alert at",  type: "number", placeholder: `${LOW_STOCK_DEFAULT}` },
-    ]} initial={{ category: "Others" }} onClose={closeModal} onSave={saveItem} />;
+    if (type === "item") {
+      const editingItem = payload?.editingItem;
+      return <FieldModal title={editingItem ? "Edit Item" : "New Item"} fields={[
+        { key: "name",          label: "Item name",           required: true, placeholder: "Web design service" },
+        { key: "category",      label: "Category",            type: "select", options: ITEM_CATEGORIES.map((c) => ({ value: c, label: c })), required: true },
+        { key: "sellingPrice",  label: "Selling price",       type: "number", required: true, placeholder: "0.00" },
+        { key: "purchasePrice", label: "Purchase price",      type: "number", placeholder: "0.00" },
+        { key: "unit",          label: "Unit",                placeholder: "hr / pc / job" },
+        { key: "stock",         label: editingItem ? "Stock (qty)" : "Opening stock (qty)", type: "number", placeholder: "0" },
+        { key: "lowStock",      label: "Low stock alert at",  type: "number", placeholder: `${LOW_STOCK_DEFAULT}` },
+      ]} initial={editingItem ? {
+        id: editingItem.id, name: editingItem.name, category: editingItem.category || "Others",
+        sellingPrice: editingItem.sellingPrice ?? editingItem.price, purchasePrice: editingItem.purchasePrice,
+        unit: editingItem.unit, stock: editingItem.stock, lowStock: editingItem.lowStock ?? LOW_STOCK_DEFAULT,
+      } : { category: "Others" }} onClose={closeModal} onSave={saveItem} />;
+    }
 
     if (type === "expense") return <FieldModal title="Record Expense" fields={[
       { key: "category", label: "Category", required: true, placeholder: "Travel, Software..." },
@@ -3115,7 +3754,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       { key: "date",     label: "Date",     type: "date" },
     ]} initial={{ date: today() }} onClose={closeModal} onSave={saveExpense} />;
 
-    if (type === "order") return <OrderModal items={items} onClose={closeModal} onSave={saveOrder} />;
+    if (type === "order") return <OrderModal items={items} onClose={closeModal} onSave={saveOrder} prefill={payload} />;
 
     if (type === "challan")
       return <ChallanModal onClose={closeModal} onSave={saveChallan} />;
@@ -3124,7 +3763,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       return <DocumentModal type={type} customers={customers} items={items} estimates={estimates} editingDoc={payload?.editingDoc} onClose={closeModal} onSave={(v: any) => saveDocument(type, v)} />;
 
     if (type === "payment") {
-      const invoiceOptions = estimates.filter((i) => i.status !== "Paid").map((i) => ({ value: i.id, label: `${i.number} — ${fmtMoney(i.total, settings.currency)}` }));
+      const invoiceOptions = estimates.filter((i) => i.status !== "Paid").map((i) => ({ value: i.id, label: `${i.number} — ${fmtMoney(Number(i.total || 0) - Number(i.amountPaid || 0), settings.currency)} due` }));
       const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
       return <FieldModal title="Record Payment" fields={[
         { key: "customerId", label: "Customer", type: "select", options: customerOptions, required: true },
@@ -3138,6 +3777,10 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     if (type === "return") {
       return <ReturnModal doc={payload?.doc} items={items} currency={settings.currency} onClose={closeModal}
         onSave={(lines: { itemId: string; qty: number }[]) => saveReturn(payload?.doc?.id, lines)} />;
+    }
+    if (type === "delivery") {
+      return <DeliveryModal doc={payload?.doc} items={items} onClose={closeModal}
+        onSave={(lines: { itemId: string; qty: number }[]) => saveDelivery(payload?.doc?.id, lines)} />;
     }
     return null;
   };
@@ -3172,7 +3815,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} active={view} onNav={setView} settings={settings} onSignOut={onSignOut} />
       <div className="flex-1 overflow-y-auto">
-        <Topbar onMenu={() => setSidebarOpen(true)} settings={settings} view={view} />
+        <Topbar onMenu={() => setSidebarOpen(true)} settings={settings} view={view} onOpenSearch={() => setGlobalSearchOpen(true)} />
         {renderView()}
       </div>
 
@@ -3185,6 +3828,15 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       </a>
 
       {renderModal()}
+      {globalSearchOpen && (
+        <GlobalSearchOverlay
+          customers={customers} items={items} estimates={estimates} currency={settings.currency}
+          onClose={() => setGlobalSearchOpen(false)}
+          onSelectCustomer={(id: string) => { setSelectedCustomerId(id); setView("customerDetail"); setGlobalSearchOpen(false); }}
+          onSelectItem={() => { setView("items"); setGlobalSearchOpen(false); }}
+          onSelectEstimate={(doc: any) => { openModal("viewEstimate", { doc }); setGlobalSearchOpen(false); }}
+        />
+      )}
 
       {shareInvoice && (
         <InvoiceShareModal invoice={shareInvoice} customer={shareCustomer} items={items} settings={settings} payment={sharePayment} onClose={() => setShareInvoice(null)} />
