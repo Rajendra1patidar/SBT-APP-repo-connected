@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
-  Menu, X, Home, Users, ShoppingBag, FileText, Truck, Receipt,
+  Menu, X, Home, Users, ShoppingBag, Truck, Receipt,
   ArrowDownToLine, Wallet, BarChart3, Globe2, Settings as SettingsIcon,
-  Bell, LifeBuoy, Plus, Trash2, Phone, ChevronDown, Sparkles, RotateCcw,
+  Bell, LifeBuoy, Plus, Trash2, Phone, ChevronDown, RotateCcw,
   Send, Check, CheckCircle2, AlertCircle, ArrowRight, MessageSquare,
   Search, MapPin, PackageCheck, ClipboardList, ChevronUp, AlertTriangle,
-  ShoppingCart, Loader2, Pencil, Printer, HardHat, Award, ChevronLeft, Eye
+  ShoppingCart, Loader2, Pencil, Printer, HardHat, Award, ChevronLeft, Eye, Star
 } from "lucide-react";
 import { api } from "../lib/api";
 
@@ -78,6 +78,10 @@ function fmtMoney(n: number | string, currency: string) {
   const v = Number(n) || 0;
   return `${currency}${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+function fmtNum(n: number | string) {
+  const v = Number(n) || 0;
+  return v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 const STATUS_STYLES: Record<string, string> = {
   Accepted: "bg-advance-50 text-advance-700",
@@ -130,8 +134,19 @@ function GhostButton({ children, onClick, className = "" }: any) {
     </button>
   );
 }
-function WhatsAppButton({ phone, message, label = "WhatsApp" }: any) {
+function WhatsAppButton({ phone, message, label = "WhatsApp", compact = false }: any) {
   const enabled = !!phone;
+  if (compact) {
+    return (
+      <a href={enabled ? waLink(phone, message) : undefined} target="_blank" rel="noreferrer"
+        onClick={(e) => !enabled && e.preventDefault()}
+        aria-label={label}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition ${enabled ? "active:scale-[0.94]" : "opacity-40 cursor-not-allowed"}`}
+        style={{ backgroundColor: WHATSAPP_GREEN }}>
+        <Phone size={15} />
+      </a>
+    );
+  }
   return (
     <a href={enabled ? waLink(phone, message) : undefined} target="_blank" rel="noreferrer"
       onClick={(e) => !enabled && e.preventDefault()}
@@ -141,8 +156,19 @@ function WhatsAppButton({ phone, message, label = "WhatsApp" }: any) {
     </a>
   );
 }
-function SmsButton({ phone, message, label = "SMS" }: any) {
+function SmsButton({ phone, message, label = "SMS", compact = false }: any) {
   const enabled = !!phone;
+  if (compact) {
+    return (
+      <a href={enabled ? smsLink(phone, message) : undefined}
+        onClick={(e) => !enabled && e.preventDefault()}
+        aria-label={label}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition ${enabled ? "active:scale-[0.94]" : "opacity-40 cursor-not-allowed"}`}
+        style={{ backgroundColor: "#4f46e5" }}>
+        <MessageSquare size={15} />
+      </a>
+    );
+  }
   return (
     <a href={enabled ? smsLink(phone, message) : undefined}
       onClick={(e) => !enabled && e.preventDefault()}
@@ -618,7 +644,7 @@ function DocumentModal({ type, customers, items, estimates, editingDoc, onClose,
             {type === "estimate" && previousDueAmount > 0 && (
               <div className="rounded-xl border border-warn-200 bg-warn-50 px-4 py-3">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-warn-800">Previous due — {fmtMoney(previousDueAmount, "")}</p>
                     <p className="mt-0.5 text-xs text-warn-700">From {previousDueEstimates.length} earlier unpaid estimate{previousDueEstimates.length !== 1 ? "s" : ""}: {previousDueEstimates.map((e: any) => e.number).join(", ")}</p>
                   </div>
@@ -689,7 +715,7 @@ function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/40 p-0 sm:p-4">
       <div className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
-          <div>
+          <div className="min-w-0">
             <h3 className="font-display text-lg font-bold text-ink">{doc.number}</h3>
             <p className="text-xs text-ink/40">{fmtDate(doc.date)}{doc.dueDate ? ` · Due ${fmtDate(doc.dueDate)}` : ""}</p>
           </div>
@@ -698,7 +724,7 @@ function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between rounded-xl bg-paper px-4 py-3">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold text-ink">{customer?.name || "Unknown customer"}</p>
               {customer?.location && <p className="text-xs text-ink/40">{customer.location}</p>}
             </div>
@@ -719,7 +745,7 @@ function ViewEstimateModal({ doc, customers, items, currency, onClose }: any) {
                 const it = itemById(ln.itemId);
                 return (
                   <div key={i} className="flex items-center justify-between rounded-xl border border-line bg-paper/60 px-3 py-2 text-sm">
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-semibold text-ink">{it?.name || ln.name || "Item"}</p>
                       <p className="text-xs text-ink/40">{ln.qty} × {fmtMoney(ln.rate, currency)}</p>
                     </div>
@@ -1068,7 +1094,7 @@ function ReturnModal({ doc, items, currency, onClose, onSave }: any) {
           <div className="space-y-3">
             {returnableLines.map((l: any) => (
               <div key={l.itemId} className="flex items-center justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold text-ink">{l.name}</p>
                   <p className="text-xs text-ink/40">
                     {l.qty - l.returned} available to return · {fmtMoney(l.rate, currency)} each
@@ -1137,7 +1163,7 @@ function DeliveryModal({ doc, items, onClose, onSave }: any) {
           <div className="space-y-3">
             {rows.map((r: any) => (
               <div key={r.itemId} className="flex items-center justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold text-ink">{r.name}</p>
                   <p className="text-xs text-ink/40">
                     {r.remaining} of {r.booked} remaining
@@ -1508,7 +1534,7 @@ function GlobalSearchOverlay({ customers, items, estimates, currency, onSelectCu
               <div className="space-y-1.5">
                 {matchedCustomers.map((c: any) => (
                   <button key={c.id} onClick={() => onSelectCustomer(c.id)} className="w-full flex items-center justify-between rounded-xl bg-paper px-3 py-2.5 text-left">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-ink">{c.name}</p>
                       {c.location && <p className="text-xs text-ink/40">{c.location}</p>}
                     </div>
@@ -1525,7 +1551,7 @@ function GlobalSearchOverlay({ customers, items, estimates, currency, onSelectCu
               <div className="space-y-1.5">
                 {matchedItems.map((it: any) => (
                   <button key={it.id} onClick={() => onSelectItem(it.id)} className="w-full flex items-center justify-between rounded-xl bg-paper px-3 py-2.5 text-left">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-ink">{it.name}</p>
                       <p className="text-xs text-ink/40">Stock: {it.stock ?? 0}</p>
                     </div>
@@ -1544,7 +1570,7 @@ function GlobalSearchOverlay({ customers, items, estimates, currency, onSelectCu
                   const cust = customers.find((c: any) => c.id === e.customerId);
                   return (
                     <button key={e.id} onClick={() => onSelectEstimate(e)} className="w-full flex items-center justify-between rounded-xl bg-paper px-3 py-2.5 text-left">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-semibold text-ink">{e.number} · {cust?.name || "Unknown"}</p>
                         <p className="text-xs text-ink/40">{fmtMoney(e.total, currency)}</p>
                       </div>
@@ -1752,9 +1778,9 @@ function Dashboard({ data, settings, openModal, go }: any) {
         ) : (
           <ul className="divide-y divide-line">
             {recent.map((r: any, i: number) => (
-              <li key={r.id} style={{ animationDelay: `${i * 25}ms` }} className="animate-row-in flex items-center justify-between py-3 text-sm">
-                <div><p className="font-semibold text-ink">{r.number || r.category}</p><p className="text-xs text-ink/40">{fmtDate(r.date)}</p></div>
-                <div className="text-right"><p className="font-mono font-semibold text-ink">{fmtMoney(r.total ?? r.amount, settings.currency)}</p>{r.status && <Badge status={r.status} />}</div>
+              <li key={r.id} style={{ animationDelay: `${i * 25}ms` }} className="animate-row-in flex items-center justify-between gap-2 py-3 text-sm">
+                <div className="min-w-0"><p className="font-semibold text-ink truncate">{r.number || r.category}</p><p className="text-xs text-ink/40 truncate">{fmtDate(r.date)}</p></div>
+                <div className="text-right shrink-0"><p className="font-mono font-semibold text-ink">{fmtMoney(r.total ?? r.amount, settings.currency)}</p>{r.status && <Badge status={r.status} />}</div>
               </li>
             ))}
           </ul>
@@ -1787,10 +1813,19 @@ function Dashboard({ data, settings, openModal, go }: any) {
 /* ---- Customers ---- */
 
 function CustomersView({ customers, openModal, removeCustomer, estimates, onSelectCustomer }: any) {
+  const [search, setSearch] = useState("");
   const balanceFor = (customerId: string) =>
     (estimates || [])
       .filter((e: any) => String(e.customerId) === String(customerId))
       .reduce((s: number, e: any) => s + (Number(e.total || 0) - Number(e.amountPaid || 0)), 0);
+
+  const q = search.trim().toLowerCase();
+  const filteredCustomers = !q ? customers : customers.filter((c: any) =>
+    (c.name || "").toLowerCase().includes(q) ||
+    (c.phone || "").toLowerCase().includes(q) ||
+    (c.email || "").toLowerCase().includes(q) ||
+    (c.location || "").toLowerCase().includes(q)
+  );
 
   return (
     <div className="space-y-3 px-5 pb-28">
@@ -1798,9 +1833,22 @@ function CustomersView({ customers, openModal, removeCustomer, estimates, onSele
         <p className="text-sm text-ink/40">{customers.length} customer{customers.length !== 1 ? "s" : ""}</p>
         <PillButton onClick={() => openModal("customer")}><Plus size={16} /> New Customer</PillButton>
       </div>
+      {customers.length > 0 && (
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, phone, email or location..."
+            className="w-full rounded-xl border border-line bg-white py-2.5 pl-9 pr-3 text-sm"
+          />
+        </div>
+      )}
       {customers.length === 0
         ? <Card><EmptyState text="Add your first customer." cta="New Customer" onCta={() => openModal("customer")} /></Card>
-        : customers.map((c: any, idx: number) => {
+        : filteredCustomers.length === 0
+        ? <Card><p className="text-center text-sm text-ink/40">No customers match your search.</p></Card>
+        : filteredCustomers.map((c: any, idx: number) => {
           const balance = balanceFor(c.id);
           const initials = (c.name || "?").trim().split(/\s+/).slice(0, 2).map((w: string) => w[0]).join("").toUpperCase();
           return (
@@ -1823,10 +1871,10 @@ function CustomersView({ customers, openModal, removeCustomer, estimates, onSele
                   {balance > 0 && <p className="mt-1 text-xs font-semibold text-bad-500">Due {fmtMoney(balance, "₹")}</p>}
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                <WhatsAppButton phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
-                <SmsButton phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
-                <button onClick={() => removeCustomer(c.id)} className="rounded-full p-2 text-bad-500/70 hover:bg-bad-50"><Trash2 size={16} /></button>
+              <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <WhatsAppButton compact phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
+                <SmsButton compact phone={c.phone} message={`Hi ${c.name}, reaching out from ${c.name}'s account.`} />
+                <button onClick={() => removeCustomer(c.id)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-bad-500/70 hover:bg-bad-50"><Trash2 size={16} /></button>
               </div>
             </Card>
           );
@@ -1864,9 +1912,9 @@ function CustomerDetailView({ customer, estimates, payments, items, currency, op
 
       <Card>
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-display text-lg font-bold text-ink">{customer.name}</p>
-            <p className="text-xs text-ink/40">{customer.email || "No email"}{customer.phone ? ` · ${customer.phone}` : ""}</p>
+          <div className="min-w-0">
+            <p className="font-display text-lg font-bold text-ink truncate">{customer.name}</p>
+            <p className="text-xs text-ink/40 truncate">{customer.email || "No email"}{customer.phone ? ` · ${customer.phone}` : ""}</p>
             {customer.location && (
               <a
                 href={customer.lat && customer.lng ? `https://www.google.com/maps/search/?api=1&query=${customer.lat},${customer.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.location)}`}
@@ -1877,9 +1925,9 @@ function CustomerDetailView({ customer, estimates, payments, items, currency, op
               </a>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <WhatsAppButton phone={customer.phone} message={`Hi ${customer.name}, reaching out from ${customer.name}'s account.`} />
-            <SmsButton phone={customer.phone} message={`Hi ${customer.name}, reaching out from ${customer.name}'s account.`} />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <WhatsAppButton compact phone={customer.phone} message={`Hi ${customer.name}, reaching out from ${customer.name}'s account.`} />
+            <SmsButton compact phone={customer.phone} message={`Hi ${customer.name}, reaching out from ${customer.name}'s account.`} />
           </div>
         </div>
       </Card>
@@ -1901,12 +1949,12 @@ function CustomerDetailView({ customer, estimates, payments, items, currency, op
             {custEstimates.map((e: any) => {
               const overdue = e.status !== "Paid" && e.dueDate && new Date(e.dueDate) < new Date();
               return (
-                <Card key={e.id} onClick={() => openModal("viewEstimate", { doc: e })} className="flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform">
-                  <div>
-                    <p className="font-semibold text-ink">{e.number}</p>
-                    <p className="text-xs text-ink/40">{fmtDate(e.date)}</p>
+                <Card key={e.id} onClick={() => openModal("viewEstimate", { doc: e })} className="flex items-center justify-between gap-2 cursor-pointer active:scale-[0.99] transition-transform">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink truncate">{e.number}</p>
+                    <p className="text-xs text-ink/40 truncate">{fmtDate(e.date)}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <p className="font-bold text-ink">{fmtMoney(e.total, currency)}</p>
                     <Badge status={overdue ? "Overdue" : e.status} />
                   </div>
@@ -1924,12 +1972,12 @@ function CustomerDetailView({ customer, estimates, payments, items, currency, op
         ) : (
           <div className="space-y-2">
             {custPayments.map((p: any) => (
-              <Card key={p.id} className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-ink">{p.invoiceNumber || "—"}</p>
-                  <p className="text-xs text-ink/40">{fmtDate(p.date)}{p.method ? ` · ${p.method}` : ""}</p>
+              <Card key={p.id} className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink truncate">{p.invoiceNumber || "—"}</p>
+                  <p className="text-xs text-ink/40 truncate">{fmtDate(p.date)}{p.method ? ` · ${p.method}` : ""}</p>
                 </div>
-                <p className={`font-bold ${Number(p.amount) < 0 ? "text-bad-600" : "text-good-600"}`}>{fmtMoney(p.amount, currency)}</p>
+                <p className={`font-bold shrink-0 ${Number(p.amount) < 0 ? "text-bad-600" : "text-good-600"}`}>{fmtMoney(p.amount, currency)}</p>
               </Card>
             ))}
           </div>
@@ -1979,10 +2027,10 @@ function ItemsView({ items, openModal, removeItem, currency }: any) {
           const threshold = it.lowStock ?? LOW_STOCK_DEFAULT;
           const isLow = (it.stock ?? 0) <= threshold;
           return (
-            <Card key={it.id} className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-ink">{it.name}</p>
+            <Card key={it.id} className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-ink truncate">{it.name}</p>
                   <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-semibold text-ink/50">{it.category || "Others"}</span>
                   {isLow && <span className="rounded-full bg-warn-100 px-2 py-0.5 text-xs font-semibold text-warn-700 flex items-center gap-1"><AlertTriangle size={10} /> Low stock</span>}
                 </div>
@@ -2008,9 +2056,13 @@ function ItemsView({ items, openModal, removeItem, currency }: any) {
 
 function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }: any) {
   const [category, setCategory] = useState("All");
+  const [search, setSearch] = useState("");
   const itemName = (id: string) => items.find((it: any) => it.id === id)?.name || "Unknown item";
   const itemCategory = (id: string) => items.find((it: any) => it.id === id)?.category || "Others";
-  const categoryFiltered = category === "All" ? orders : orders.filter((o: any) => itemCategory(o.itemId) === category);
+  const q = search.trim().toLowerCase();
+  const categoryFiltered = orders
+    .filter((o: any) => category === "All" || itemCategory(o.itemId) === category)
+    .filter((o: any) => !q || itemName(o.itemId).toLowerCase().includes(q) || (o.notes || "").toLowerCase().includes(q));
   const pending = categoryFiltered.filter((o: any) => o.status === "Pending");
   const received = categoryFiltered.filter((o: any) => o.status === "Received");
 
@@ -2020,6 +2072,17 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
         <p className="text-sm text-ink/40">{orders.length} order{orders.length !== 1 ? "s" : ""}</p>
         <PillButton onClick={() => openModal("order")}><Plus size={16} /> New Order</PillButton>
       </div>
+      {orders.length > 0 && (
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search orders by item or note..."
+            className="w-full rounded-xl border border-line bg-white py-2.5 pl-9 pr-3 text-sm"
+          />
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {["All", ...ITEM_CATEGORIES].map((c) => (
           <button key={c} onClick={() => setCategory(c)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${category === c ? "bg-brand-500 text-white" : "bg-paper text-ink/70"}`}>{c}</button>
@@ -2037,10 +2100,10 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
                 <p className="mb-2 px-1 text-xs font-bold uppercase text-ink/40">Pending ({pending.length})</p>
                 {pending.map((o: any) => (
                   <Card key={o.id} className="mb-2">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-ink">{itemName(o.itemId)}</p>
-                        <p className="text-xs text-ink/40">Qty: {o.qty} · {fmtDate(o.date)}{o.notes ? ` · ${o.notes}` : ""}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-ink truncate">{itemName(o.itemId)}</p>
+                        <p className="text-xs text-ink/40 truncate">Qty: {o.qty} · {fmtDate(o.date)}{o.notes ? ` · ${o.notes}` : ""}</p>
                       </div>
                       <Badge status="Pending" />
                     </div>
@@ -2059,12 +2122,12 @@ function OrdersView({ orders, items, openModal, markOrderReceived, removeOrder }
               <div>
                 <p className="mb-2 px-1 text-xs font-bold uppercase text-ink/40">Received ({received.length})</p>
                 {received.map((o: any) => (
-                  <Card key={o.id} className="mb-2 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-ink">{itemName(o.itemId)}</p>
-                      <p className="text-xs text-ink/40">Qty: {o.qty} · {fmtDate(o.date)}{o.notes ? ` · ${o.notes}` : ""}</p>
+                  <Card key={o.id} className="mb-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink truncate">{itemName(o.itemId)}</p>
+                      <p className="text-xs text-ink/40 truncate">Qty: {o.qty} · {fmtDate(o.date)}{o.notes ? ` · ${o.notes}` : ""}</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <Badge status="Received" />
                       <button onClick={() => removeOrder(o.id)} className="rounded-full p-1.5 text-bad-400 hover:bg-bad-50"><Trash2 size={14} /></button>
                     </div>
@@ -2137,10 +2200,10 @@ function DocumentList({ type, docs, customers, items, currency, openModal, remov
       const totalInc = (d.incomes || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
       return (
         <Card key={d.id}>
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="font-semibold text-ink">{d.number} · {d.route || "–"}</p>
-              <p className="text-xs text-ink/40">{fmtDate(d.fromDate)} → {fmtDate(d.toDate)}</p>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-ink truncate">{d.number} · {d.route || "–"}</p>
+              <p className="text-xs text-ink/40 truncate">{fmtDate(d.fromDate)} → {fmtDate(d.toDate)}</p>
             </div>
             <Badge status={d.status} />
           </div>
@@ -2175,12 +2238,12 @@ function DocumentList({ type, docs, customers, items, currency, openModal, remov
 
     return (
       <Card key={d.id}>
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="font-semibold text-ink">{d.number}</p>
-            <p className="text-xs text-ink/40">{customerName(d.customerId)} · {fmtDate(d.date)}</p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-semibold text-ink truncate">{d.number}</p>
+            <p className="text-xs text-ink/40 truncate">{customerName(d.customerId)} · {fmtDate(d.date)}</p>
           </div>
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-end gap-1 shrink-0">
             <Badge status={displayStatus} />
             {type === "estimate" && d.isAdvanceBooking && (
               <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-700">Advance Booking</span>
@@ -2325,9 +2388,9 @@ function PaymentsView({ payments, customers, currency, openModal, removePayment 
         : filtered.length === 0
         ? <Card><p className="text-center text-sm text-ink/40">No matches for "{search}".</p></Card>
         : filtered.map((p: any) => (
-          <Card key={p.id} className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-ink">{customerName(p.customerId)}</p>
+          <Card key={p.id} className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-ink truncate">{customerName(p.customerId)}</p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-ink/40">{fmtDate(p.date)}{p.method ? ` · ${p.method}` : ""}</span>
                 {p.invoiceNumber
@@ -2349,18 +2412,36 @@ function PaymentsView({ payments, customers, currency, openModal, removePayment 
 /* ---- Expenses ---- */
 
 function ExpensesView({ expenses, currency, openModal, removeExpense }: any) {
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const filtered = !q ? expenses : expenses.filter((e: any) =>
+    (e.category || "").toLowerCase().includes(q) || (e.vendor || "").toLowerCase().includes(q)
+  );
   return (
     <div className="space-y-3 px-5 pb-28">
       <div className="flex items-center justify-between pt-1">
         <p className="text-sm text-ink/40">{expenses.length} expense{expenses.length !== 1 ? "s" : ""}</p>
         <PillButton onClick={() => openModal("expense")}><Plus size={16} /> Record Expense</PillButton>
       </div>
+      {expenses.length > 0 && (
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by category or vendor..."
+            className="w-full rounded-xl border border-line bg-white py-2.5 pl-9 pr-3 text-sm"
+          />
+        </div>
+      )}
       {expenses.length === 0
         ? <Card><EmptyState text="Record your expenses." cta="Record Expense" onCta={() => openModal("expense")} /></Card>
-        : expenses.map((e: any) => (
-          <Card key={e.id} className="flex items-center justify-between">
-            <div><p className="font-semibold text-ink">{e.category}</p><p className="text-xs text-ink/40">{e.vendor || "No vendor"} · {fmtDate(e.date)}</p></div>
-            <div className="flex items-center gap-3">
+        : filtered.length === 0
+        ? <Card><p className="text-center text-sm text-ink/40">No expenses match your search.</p></Card>
+        : filtered.map((e: any) => (
+          <Card key={e.id} className="flex items-center justify-between gap-2">
+            <div className="min-w-0"><p className="font-semibold text-ink truncate">{e.category}</p><p className="text-xs text-ink/40 truncate">{e.vendor || "No vendor"} · {fmtDate(e.date)}</p></div>
+            <div className="flex items-center gap-3 shrink-0">
               <span className="font-bold text-bad-600">-{fmtMoney(e.amount, currency)}</span>
               <button onClick={() => removeExpense(e.id)} className="rounded-full p-2 text-bad-400 hover:bg-bad-50"><Trash2 size={16} /></button>
             </div>
@@ -2371,16 +2452,23 @@ function ExpensesView({ expenses, currency, openModal, removeExpense }: any) {
   );
 }
 
+/* ---- Points helpers (1 cement bag = 1 pt, 100kg saria = 5 pts) ---- */
+
+const isCementItemName = (name: string) => /cement/i.test(name || "");
+const isSariaItemName = (name: string) => /saria/i.test(name || "");
+const sariaToPoints = (qty: number) => (qty / 100) * 5;
+
 /* ---- To-Do Tracking (inventory focus, replaces Time Tracking) ---- */
 
 function ContractorScorecardView({ estimates, items, currency }: any) {
   const [openContractor, setOpenContractor] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
-  const byContractor: Record<string, { total: number; count: number; itemMap: Record<string, { name: string; qty: number; amount: number }> }> = {};
+  const byContractor: Record<string, { total: number; count: number; cementQty: number; sariaQty: number; itemMap: Record<string, { name: string; qty: number; amount: number }> }> = {};
   (estimates || []).forEach((est: any) => {
     const name = (est.contractorName || "").trim();
     if (!name) return;
-    if (!byContractor[name]) byContractor[name] = { total: 0, count: 0, itemMap: {} };
+    if (!byContractor[name]) byContractor[name] = { total: 0, count: 0, cementQty: 0, sariaQty: 0, itemMap: {} };
     byContractor[name].total += Number(est.total || 0);
     byContractor[name].count += 1;
     (est.lines || []).forEach((ln: any) => {
@@ -2391,35 +2479,93 @@ function ContractorScorecardView({ estimates, items, currency }: any) {
       if (!byContractor[name].itemMap[itemName]) byContractor[name].itemMap[itemName] = { name: itemName, qty: 0, amount: 0 };
       byContractor[name].itemMap[itemName].qty += qty;
       byContractor[name].itemMap[itemName].amount += amount;
+      if (isCementItemName(itemName)) byContractor[name].cementQty += qty;
+      if (isSariaItemName(itemName)) byContractor[name].sariaQty += qty;
     });
   });
 
-  const contractors = Object.keys(byContractor).sort((a, b) => byContractor[b].total - byContractor[a].total);
+  const q = search.trim().toLowerCase();
+  const contractors = Object.keys(byContractor)
+    .filter((name) => !q || name.toLowerCase().includes(q))
+    .sort((a, b) => byContractor[b].total - byContractor[a].total);
+
+  const overallPoints = Object.values(byContractor).reduce((s, c) => s + c.cementQty + sariaToPoints(c.sariaQty), 0);
+  const overallCementQty = Object.values(byContractor).reduce((s, c) => s + c.cementQty, 0);
+  const overallSariaQty = Object.values(byContractor).reduce((s, c) => s + c.sariaQty, 0);
 
   return (
     <div className="space-y-3 px-5 pb-28">
+      {overallPoints > 0 && (
+        <div className="relative overflow-hidden rounded-card bg-brand-700 p-5 text-white mt-1">
+          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-brand-500/40" />
+          <div className="relative">
+            <p className="text-xs font-semibold text-white/70">Total contractor points</p>
+            <p className="mt-1 font-display text-3xl font-semibold">{fmtNum(overallPoints)}</p>
+            <p className="mt-1 text-xs font-semibold text-white/70">1 cement bag = 1 point · 100kg saria = 5 points</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div><p className="text-[11px] text-white/60">Cement</p><p className="font-mono text-sm font-semibold">{fmtNum(overallCementQty)} bags</p></div>
+              <div><p className="text-[11px] text-white/60">Saria</p><p className="font-mono text-sm font-semibold">{fmtNum(overallSariaQty)} kg</p></div>
+            </div>
+          </div>
+        </div>
+      )}
+      {Object.keys(byContractor).length > 0 && (
+        <div className="relative pt-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search contractors..."
+            className="w-full rounded-xl border border-line bg-white py-2.5 pl-9 pr-3 text-sm"
+          />
+        </div>
+      )}
       {contractors.length === 0 ? (
-        <Card><p className="text-sm text-ink/40">No estimates have a contractor name set yet. Add one when creating an estimate to see them here.</p></Card>
+        <Card><p className="text-sm text-ink/40">{q ? "No contractors match your search." : "No estimates have a contractor name set yet. Add one when creating an estimate to see them here."}</p></Card>
       ) : contractors.map((name) => {
         const c = byContractor[name];
         const itemRows = Object.values(c.itemMap).sort((a, b) => b.amount - a.amount);
+        const points = c.cementQty + sariaToPoints(c.sariaQty);
         const isOpen = openContractor === name;
         return (
           <Card key={name}>
-            <button className="flex w-full items-center justify-between text-left" onClick={() => setOpenContractor(isOpen ? null : name)}>
-              <div>
-                <p className="text-sm font-bold text-ink">{name}</p>
-                <p className="mt-0.5 text-xs text-ink/40">{c.count} estimate{c.count !== 1 ? "s" : ""} · {fmtMoney(c.total, currency)}</p>
+            <button className="flex w-full items-center justify-between gap-2 text-left" onClick={() => setOpenContractor(isOpen ? null : name)}>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-ink truncate">{name}</p>
+                <p className="mt-0.5 text-xs text-ink/40 truncate">{c.count} estimate{c.count !== 1 ? "s" : ""} · {fmtMoney(c.total, currency)}</p>
               </div>
-              {isOpen ? <ChevronUp size={18} className="text-ink/40" /> : <ChevronDown size={18} className="text-ink/40" />}
+              <div className="flex items-center gap-2 shrink-0">
+                {points > 0 && (
+                  <span className="flex items-center gap-1 rounded-pill bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">
+                    <Star size={13} /> {fmtNum(points)}
+                  </span>
+                )}
+                {isOpen ? <ChevronUp size={18} className="text-ink/40" /> : <ChevronDown size={18} className="text-ink/40" />}
+              </div>
             </button>
             {isOpen && (
               <div className="mt-3 border-t border-line pt-3">
+                {(c.cementQty > 0 || c.sariaQty > 0) && (
+                  <div className="mb-3 space-y-1.5 rounded-xl bg-brand-50/60 px-3 py-2.5">
+                    {c.cementQty > 0 && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-ink/70">Cement — {fmtNum(c.cementQty)} bag{c.cementQty !== 1 ? "s" : ""}</span>
+                        <span className="font-semibold text-ink">{fmtNum(c.cementQty)} pts</span>
+                      </div>
+                    )}
+                    {c.sariaQty > 0 && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-ink/70">Saria — {fmtNum(c.sariaQty)} kg</span>
+                        <span className="font-semibold text-ink">{fmtNum(sariaToPoints(c.sariaQty))} pts</span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {itemRows.map((r) => (
-                  <div key={r.name} className="flex items-center justify-between py-1.5 text-sm">
-                    <span className="text-ink/70">{r.name}</span>
-                    <span className="text-ink/50">{r.qty} units</span>
-                    <span className="font-semibold text-ink">{fmtMoney(r.amount, currency)}</span>
+                  <div key={r.name} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+                    <span className="min-w-0 truncate text-ink/70">{r.name}</span>
+                    <span className="shrink-0 text-ink/50">{fmtNum(r.qty)} units</span>
+                    <span className="shrink-0 font-semibold text-ink">{fmtMoney(r.amount, currency)}</span>
                   </div>
                 ))}
               </div>
@@ -2672,7 +2818,7 @@ function ToDoTrackingView({ items, settings, openModal }: any) {
           <ul className="space-y-2">
             {lowItems.map((it: any) => (
               <li key={it.id} className="flex items-center justify-between rounded-xl bg-warn-50 px-4 py-3">
-                <div>
+                <div className="min-w-0">
                   <p className="font-semibold text-ink">{it.name}</p>
                   <p className="text-xs text-ink/50">{it.unit || "unit"} · Alert threshold: {it.lowStock ?? LOW_STOCK_DEFAULT}</p>
                 </div>
@@ -2721,7 +2867,7 @@ function ToDoTrackingView({ items, settings, openModal }: any) {
               <ul className="space-y-2">
                 {allItems.map((it: any) => (
                   <li key={it.id} className="flex items-center justify-between rounded-xl border border-line px-4 py-2.5">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-ink">{it.name}</p>
                       <p className="text-xs text-ink/40">{it.unit || "unit"} · {it.category || "Others"}</p>
                     </div>
@@ -2954,7 +3100,7 @@ function ReportsView({ data, currency, settings }: any) {
       <Card className="border border-good-100 bg-good-50/40">
         <p className="text-xs font-semibold text-good-700">Gross Profit (revenue − cost of goods sold)</p>
         <p className="mt-1 text-2xl font-bold text-good-700">{fmtMoney(grossProfit, currency)}</p>
-        <p className="mt-1 text-xs text-good-600">{grossMarginPercent.toFixed(1)}% margin · Cost of goods sold: {fmtMoney(costOfGoodsSold, currency)}</p>
+        <p className="mt-1 text-xs text-good-600">{grossMarginPercent.toFixed(2)}% margin · Cost of goods sold: {fmtMoney(costOfGoodsSold, currency)}</p>
         <p className="mt-2 text-xs text-ink/40">This is different from "Total Received − Total Expenses" — it accounts for what your items actually cost to buy, not just cash overhead.</p>
       </Card>
 
@@ -2964,7 +3110,7 @@ function ReportsView({ data, currency, settings }: any) {
           <div className="space-y-2">
             {itemProfitability.slice(0, 10).map((it) => (
               <div key={it.itemId} className="flex items-center justify-between border-b border-line pb-2 last:border-0 last:pb-0">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold text-ink">{it.name}</p>
                   <p className="text-xs text-ink/40">{it.qtySold} sold · Revenue {fmtMoney(it.revenue, currency)}</p>
                 </div>
@@ -2997,7 +3143,7 @@ function ReportsView({ data, currency, settings }: any) {
               : <ul className="divide-y divide-line">
                 {nameMatchedInvoices.map((inv: any) => {
                   const c = customers.find((cu: any) => cu.id === inv.customerId);
-                  return (<li key={inv.id} className="py-3"><div className="flex items-start justify-between"><div><p className="font-semibold text-ink">{inv.number}</p><p className="text-xs text-ink/50">{c?.name} · {fmtDate(inv.date)}</p>{c?.location && <p className="flex items-center gap-1 text-xs text-ink/40"><MapPin size={10} /> {c.location}</p>}</div><div className="text-right"><p className="font-bold text-ink">{fmtMoney(inv.total, currency)}</p><Badge status={inv.status} /></div></div></li>);
+                  return (<li key={inv.id} className="py-3"><div className="flex items-start justify-between"><div className="min-w-0"><p className="font-semibold text-ink truncate">{inv.number}</p><p className="text-xs text-ink/50 truncate">{c?.name} · {fmtDate(inv.date)}</p>{c?.location && <p className="flex items-center gap-1 text-xs text-ink/40 truncate"><MapPin size={10} /> {c.location}</p>}</div><div className="text-right shrink-0"><p className="font-bold text-ink">{fmtMoney(inv.total, currency)}</p><Badge status={inv.status} /></div></div></li>);
                 })}
               </ul>
             }
@@ -3022,9 +3168,9 @@ function ReportsView({ data, currency, settings }: any) {
                   const custTotal = custInvoices.reduce((s: number, inv: any) => s + inv.total, 0);
                   return (
                     <li key={c.id} className="py-3">
-                      <div className="flex items-start justify-between">
-                        <div><p className="font-semibold text-ink">{c.name}</p><p className="flex items-center gap-1 text-xs text-ink/40 mt-0.5"><MapPin size={10} /> {c.location}</p>{c.phone && <p className="text-xs text-ink/40">{c.phone}</p>}</div>
-                        <div className="text-right"><p className="text-xs text-ink/40">{custInvoices.length} estimate{custInvoices.length !== 1 ? "s" : ""}</p><p className="font-bold text-ink">{fmtMoney(custTotal, currency)}</p></div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0"><p className="font-semibold text-ink truncate">{c.name}</p><p className="flex items-center gap-1 text-xs text-ink/40 mt-0.5 truncate"><MapPin size={10} /> {c.location}</p>{c.phone && <p className="text-xs text-ink/40 truncate">{c.phone}</p>}</div>
+                        <div className="text-right shrink-0"><p className="text-xs text-ink/40">{custInvoices.length} estimate{custInvoices.length !== 1 ? "s" : ""}</p><p className="font-bold text-ink">{fmtMoney(custTotal, currency)}</p></div>
                       </div>
                       {custInvoices.length > 0 && <ul className="mt-2 space-y-1 pl-2 border-l-2 border-line">{custInvoices.map((inv: any) => (<li key={inv.id} className="flex items-center justify-between text-xs text-ink/50"><span>{inv.number} · {fmtDate(inv.date)}</span><span className="flex items-center gap-2">{fmtMoney(inv.total, currency)}<Badge status={inv.status} /></span></li>))}</ul>}
                     </li>
@@ -3165,7 +3311,7 @@ function AdvancedBillingView({ autoReminder, setAutoReminder, overdueCount, sett
     <div className="space-y-4 px-5 pb-28">
       <Card>
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h3 className="font-display text-base font-bold text-ink">WhatsApp payment reminders</h3>
             <p className="mt-1 text-sm text-ink/40">Show a banner for overdue estimates with one-tap WhatsApp messaging.</p>
           </div>
@@ -3299,135 +3445,6 @@ function SettingsView({ settings, setSettings }: any) {
 }
 
 /* ---- Main App ---- */
-
-/* ---- PIN Screen ---- */
-
-const PIN_KEY = "invoice_app_pin";
-// Session is tracked in React state only — clears on every page load/refresh
-
-function PinScreen({ onUnlocked }: { onUnlocked: () => void }) {
-  const storedPin = localStorage.getItem(PIN_KEY);
-  const isSetup = !storedPin;
-
-  const [phase, setPhase] = useState<"enter" | "setup" | "confirm">(isSetup ? "setup" : "enter");
-  const [pin, setPin] = useState("");
-  const [setupPin, setSetupPin] = useState("");
-  const [error, setError] = useState("");
-  const [shake, setShake] = useState(false);
-
-  const MAX = 4;
-
-  const triggerShake = (msg: string) => {
-    setError(msg);
-    setShake(true);
-    setPin("");
-    setTimeout(() => setShake(false), 500);
-  };
-
-  const handleDigit = (d: string) => {
-    if (pin.length >= MAX) return;
-    const next = pin + d;
-    setPin(next);
-    setError("");
-
-    if (next.length === MAX) {
-      setTimeout(() => {
-        if (phase === "enter") {
-          if (next === localStorage.getItem(PIN_KEY)) {
-            onUnlocked();
-          } else {
-            triggerShake("Incorrect PIN. Try again.");
-          }
-        } else if (phase === "setup") {
-          setSetupPin(next);
-          setPin("");
-          setPhase("confirm");
-        } else if (phase === "confirm") {
-          if (next === setupPin) {
-            localStorage.setItem(PIN_KEY, next);
-            onUnlocked();
-          } else {
-            triggerShake("PINs don't match. Start again.");
-            setSetupPin("");
-            setPhase("setup");
-          }
-        }
-      }, 120);
-    }
-  };
-
-  const handleDelete = () => { setPin((p) => p.slice(0, -1)); setError(""); };
-
-  const dots = Array.from({ length: MAX }, (_, i) => i < pin.length);
-  const phaseLabel = phase === "setup" ? "Set a 4-digit PIN" : phase === "confirm" ? "Confirm your PIN" : "Enter your PIN";
-  const phaseHint  = phase === "setup" ? "You'll enter this every time you open the app." : phase === "confirm" ? "Re-enter the same PIN to confirm." : "";
-
-  return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-brand-900 select-none">
-      <div className="flex flex-col items-center gap-8 w-full max-w-xs px-6">
-        {/* Icon + title */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center shadow-lg">
-            <ShoppingBag size={32} className="text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">{phaseLabel}</h1>
-          {phaseHint && <p className="text-sm text-ink/40 text-center">{phaseHint}</p>}
-        </div>
-
-        {/* PIN dots */}
-        <div className={`flex gap-4 transition-transform ${shake ? "animate-[shake_0.4s_ease]" : ""}`}>
-          {dots.map((filled, i) => (
-            <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${filled ? "bg-brand-400 border-brand-400 scale-110" : "border-ink/30"}`} />
-          ))}
-        </div>
-
-        {/* Error */}
-        {error && <p className="text-sm font-semibold text-bad-400 -mt-4 text-center">{error}</p>}
-
-        {/* Numpad */}
-        <div className="grid grid-cols-3 gap-3 w-full">
-          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((k, i) => {
-            if (k === "") return <div key={i} />;
-            const isDelete = k === "⌫";
-            return (
-              <button
-                key={k + i}
-                onClick={() => isDelete ? handleDelete() : handleDigit(k)}
-                className={`h-16 rounded-2xl text-xl font-semibold transition active:scale-95 ${
-                  isDelete
-                    ? "bg-ink/20 text-ink/30 hover:bg-ink/20"
-                    : "bg-ink/20 text-white hover:bg-ink/20"
-                }`}
-              >
-                {k}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Reset link (only on enter phase) */}
-        {phase === "enter" && (
-          <button
-            onClick={() => { localStorage.removeItem(PIN_KEY); setPhase("setup"); setPin(""); setError(""); }}
-            className="text-xs text-ink/50 hover:text-ink/30 transition mt-2"
-          >
-            Forgot PIN? Reset
-          </button>
-        )}
-      </div>
-
-      <style>{`
-        @keyframes shake {
-          0%,100%{transform:translateX(0)}
-          20%{transform:translateX(-8px)}
-          40%{transform:translateX(8px)}
-          60%{transform:translateX(-5px)}
-          80%{transform:translateX(5px)}
-        }
-      `}</style>
-    </div>
-  );
-}
 
 function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   const [view, setView] = useState("dashboard");
@@ -3721,7 +3738,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       const qty = Number(ln.qty || 0);
       const rate = ln.rate ?? it?.price ?? 0;
       const amount = qty * rate;
-      return `<div class="ln"><span class="ln-name">${name} × ${qty}</span><span class="ln-amt">${fmtMoney(amount, settings.currency)}</span></div>`;
+      return `<div class="ln"><span class="ln-name">${name} × ${qty} @ ${fmtMoney(rate, settings.currency)}</span><span class="ln-amt">${fmtMoney(amount, settings.currency)}</span></div>`;
     }).join("");
 
     const extrasHtml = [
