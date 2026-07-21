@@ -19,6 +19,7 @@ const settingsRoutes = require("./routes/settingsRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const makeDocumentRouter = require("./routes/documentRoutes");
 const labourSessionRoutes = require("./routes/labourSessionRoutes");
+const contractorRoutes = require("./routes/contractorRoutes");
 
 const app = express();
 
@@ -50,6 +51,17 @@ app.use(
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
 app.use("/api", limiter);
 
+// Auth endpoints get a much tighter per-IP limit than the rest of the API —
+// a 4-6 digit PIN is guessable quickly at 300 requests/15min, so this closes
+// most of that gap. The account lockout in authController is the other half
+// (it protects against attempts spread across many IPs at one account).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { message: "Too many attempts from this device. Please wait a few minutes and try again." },
+});
+app.use("/api/auth", authLimiter);
+
 // ---- health check (used by Railway / uptime monitors) ----
 app.get("/api/health", (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
 
@@ -67,6 +79,7 @@ app.use("/api/reports", protect, reportRoutes);
 app.use("/api/estimates", protect, makeDocumentRouter("estimate"));
 app.use("/api/challans", protect, makeDocumentRouter("challan"));
 app.use("/api/labour-sessions", protect, labourSessionRoutes);
+app.use("/api/contractors", protect, contractorRoutes);
 
 app.get("/", (req, res) => res.send("SBT backend API is running."));
 
