@@ -5,7 +5,7 @@ import {
   Bell, LifeBuoy, Plus, Trash2, Phone, ChevronDown, RotateCcw,
   Send, Check, CheckCircle2, AlertCircle, ArrowRight, MessageSquare,
   Search, MapPin, PackageCheck, ClipboardList, ChevronUp, AlertTriangle,
-  ShoppingCart, Loader2, Pencil, Printer, HardHat, Award, ChevronLeft, Eye, Star
+  ShoppingCart, Loader2, Pencil, Printer, HardHat, Award, ChevronLeft, ChevronRight, Eye, Star
 } from "lucide-react";
 import { api } from "../lib/api";
 
@@ -67,7 +67,11 @@ interface InvoiceLine {
 }
 
 function waLink(phone: string, message: string) {
-  const clean = (phone || "").replace(/[^\d+]/g, "").replace(/^\+/, "");
+  let clean = (phone || "").replace(/[^\d+]/g, "").replace(/^\+/, "");
+  // Numbers are entered as plain 10-digit local numbers (e.g. 9876543210).
+  // wa.me requires the full international number, so assume India (+91)
+  // when we see a bare 10-digit number with no country code already.
+  if (/^\d{10}$/.test(clean)) clean = `91${clean}`;
   return `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
 }
 function smsLink(phone: string, message: string) {
@@ -2458,16 +2462,184 @@ const isCementItemName = (name: string) => /cement/i.test(name || "");
 const isSariaItemName = (name: string) => /saria/i.test(name || "");
 const sariaToPoints = (qty: number) => (qty / 100) * 5;
 
+/* ---- Period-range helpers (week/month/year navigation for the contractor filter) ---- */
+
+function startOfWeek(d: Date) { const x = new Date(d); const day = (x.getDay() + 6) % 7; x.setDate(x.getDate() - day); x.setHours(0, 0, 0, 0); return x; }
+function endOfWeek(d: Date) { const s = startOfWeek(d); const e = new Date(s); e.setDate(s.getDate() + 6); e.setHours(23, 59, 59, 999); return e; }
+function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999); }
+function startOfYear(d: Date) { return new Date(d.getFullYear(), 0, 1); }
+function endOfYear(d: Date) { return new Date(d.getFullYear(), 11, 31, 23, 59, 59, 999); }
+
+type PeriodPreset = "week" | "month" | "year" | "custom";
+
+function getPeriodRange(preset: PeriodPreset, anchor: Date, customFrom: string, customTo: string) {
+  if (preset === "custom") {
+    const from = customFrom ? new Date(`${customFrom}T00:00:00`) : null;
+    const to = customTo ? new Date(`${customTo}T23:59:59`) : null;
+    const label = from && to ? `${fmtDate(customFrom)} – ${fmtDate(customTo)}` : "Pick a date range";
+    return { from, to, label };
+  }
+  if (preset === "week") {
+    const from = startOfWeek(anchor), to = endOfWeek(anchor);
+    return { from, to, label: `${from.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })} – ${to.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` };
+  }
+  if (preset === "year") {
+    const from = startOfYear(anchor), to = endOfYear(anchor);
+    return { from, to, label: `${anchor.getFullYear()}` };
+  }
+  const from = startOfMonth(anchor), to = endOfMonth(anchor);
+  return { from, to, label: anchor.toLocaleDateString("en-IN", { month: "long", year: "numeric" }) };
+}
+
+/* ---- Contractor share message/print builders ---- */
+
+function buildContractorMessage(name: string, c: any, currency: string, periodLabel: string, mode: "summary" | "full") {
+  const points = c.cementQty + sariaToPoints(c.sariaQty);
+  let msg = `*${name} — Contractor Summary*\n${periodLabel}\n\n`;
+  msg += `Points: ${fmtNum(points)}\n`;
+  msg += `Estimates: ${c.count} · Total: ${fmtMoney(c.total, currency)}\n`;
+  if (mode === "full") {
+    if (c.cementQty > 0) msg += `Cement: ${fmtNum(c.cementQty)} bags (${fmtNum(c.cementQty)} pts)\n`;
+    if (c.sariaQty > 0) msg += `Saria: ${fmtNum(c.sariaQty)} kg (${fmtNum(sariaToPoints(c.sariaQty))} pts)\n`;
+    const itemRows: any[] = Object.values(c.itemMap).sort((a: any, b: any) => b.amount - a.amount);
+    if (itemRows.length) {
+      msg += `\nItems:\n`;
+      itemRows.forEach((r: any) => { msg += `• ${r.name} — ${fmtNum(r.qty)} units — ${fmtMoney(r.amount, currency)}\n`; });
+    }
+  }
+  return msg;
+}
+
+function buildContractorListMessage(names: string[], byContractor: Record<string, any>, currency: string, periodLabel: string, mode: "summary" | "full") {
+  let msg = `*Contractor Points — ${periodLabel}*\n\n`;
+  names.forEach((name) => {
+    const c = byContractor[name];
+    const points = c.cementQty + sariaToPoints(c.sariaQty);
+    msg += `${name} — ${fmtNum(points)} pts · ${fmtMoney(c.total, currency)}\n`;
+    if (mode === "full") {
+      if (c.cementQty > 0) msg += `  Cement: ${fmtNum(c.cementQty)} bags\n`;
+      if (c.sariaQty > 0) msg += `  Saria: ${fmtNum(c.sariaQty)} kg\n`;
+    }
+  });
+  return msg;
+}
+
+function capForWhatsApp(msg: string) {
+  return msg.length > 1800 ? msg.slice(0, 1750) + "\n…(truncated — use Print for the full list)" : msg;
+}
+
+function printContractorReport(rows: { name: string; c: any }[], periodLabel: string, mode: "summary" | "full", currency: string, heading: string) {
+  const rowsHtml = rows.map(({ name, c }) => {
+    const points = c.cementQty + sariaToPoints(c.sariaQty);
+    const itemsHtml = mode === "full"
+      ? `<tr><td colspan="4" class="sub-row"><div class="sub">${
+          [
+            c.cementQty > 0 ? `Cement: ${fmtNum(c.cementQty)} bags` : "",
+            c.sariaQty > 0 ? `Saria: ${fmtNum(c.sariaQty)} kg` : "",
+            ...Object.values(c.itemMap).sort((a: any, b: any) => b.amount - a.amount).map((r: any) => `${r.name}: ${fmtNum(r.qty)} units — ${fmtMoney(r.amount, currency)}`),
+          ].filter(Boolean).join("<br/>")
+        }</div></td></tr>`
+      : "";
+    return `<tr><td>${name}</td><td>${c.count}</td><td>${fmtNum(points)}</td><td>${fmtMoney(c.total, currency)}</td></tr>${itemsHtml}`;
+  }).join("");
+
+  const w = window.open("", "_blank", "width=800,height=900");
+  if (!w) { alert("Please allow pop-ups to print."); return; }
+  w.document.write(`<!doctype html><html><head><title>${heading}</title><style>
+    @page { size: A4; margin: 14mm; }
+    body { font-family: Arial, Helvetica, sans-serif; color:#0f172a; }
+    h1 { font-size: 16px; margin-bottom:2px; }
+    .period { font-size: 11px; color:#64748b; margin-bottom: 14px; }
+    table { width:100%; border-collapse: collapse; font-size: 11px; }
+    th, td { text-align:left; padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
+    th { color:#64748b; font-size:10px; text-transform:uppercase; }
+    .sub-row td { padding-top:0; border-bottom: 1px solid #e2e8f0; }
+    .sub { font-size: 10px; color:#475569; padding: 2px 0 8px 8px; }
+  </style></head><body>
+    <h1>${heading}</h1>
+    <div class="period">${periodLabel}</div>
+    <table><thead><tr><th>Contractor</th><th>Estimates</th><th>Points</th><th>Total</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
+function ContractorSharePopup({ title, onFormat, onCancel }: any) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 p-4">
+      <div className="w-full max-w-xs rounded-3xl bg-white p-6 shadow-xl">
+        <h3 className="font-display text-lg font-bold text-ink">Share {title}</h3>
+        <p className="mt-1 text-sm text-ink/50">Choose what to include, then how to send it.</p>
+        <div className="mt-5 space-y-4">
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-ink/40">Points + totals only</p>
+            <div className="flex gap-2">
+              <button onClick={() => onFormat("summary", "whatsapp")} className="flex-1 flex items-center justify-center gap-1.5 rounded-full bg-good-500 py-2.5 text-sm font-bold text-white active:scale-[0.98]"><MessageSquare size={15} /> WhatsApp</button>
+              <button onClick={() => onFormat("summary", "print")} className="flex-1 flex items-center justify-center gap-1.5 rounded-full border border-line py-2.5 text-sm font-semibold text-ink/70 active:scale-[0.98]"><Printer size={15} /> Print</button>
+            </div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-ink/40">Full breakdown (cement, saria, items)</p>
+            <div className="flex gap-2">
+              <button onClick={() => onFormat("full", "whatsapp")} className="flex-1 flex items-center justify-center gap-1.5 rounded-full bg-good-500 py-2.5 text-sm font-bold text-white active:scale-[0.98]"><MessageSquare size={15} /> WhatsApp</button>
+              <button onClick={() => onFormat("full", "print")} className="flex-1 flex items-center justify-center gap-1.5 rounded-full border border-line py-2.5 text-sm font-semibold text-ink/70 active:scale-[0.98]"><Printer size={15} /> Print</button>
+            </div>
+          </div>
+          <button onClick={onCancel} className="w-full rounded-full border border-line py-2.5 text-sm font-semibold text-ink/50">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---- To-Do Tracking (inventory focus, replaces Time Tracking) ---- */
 
-function ContractorScorecardView({ estimates, items, currency }: any) {
+function ContractorScorecardView({ estimates, items, currency, contractors, onSavePhone, showToast }: any) {
   const [openContractor, setOpenContractor] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [preset, setPreset] = useState<PeriodPreset>("month");
+  const [anchor, setAnchor] = useState(new Date());
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [sharePopup, setSharePopup] = useState<{ scope: "single" | "all"; name?: string } | null>(null);
+  const [editingPhoneFor, setEditingPhoneFor] = useState<string | null>(null);
+
+  const phoneByName: Record<string, string> = {};
+  (contractors || []).forEach((c: any) => { phoneByName[c.name.trim().toLowerCase()] = c.phone || ""; });
+  const phoneFor = (name: string) => phoneByName[name.trim().toLowerCase()] || "";
+
+  const range = getPeriodRange(preset, anchor, customFrom, customTo);
+  const shiftPeriod = (dir: number) => {
+    setAnchor((a) => {
+      const next = new Date(a);
+      if (preset === "week") next.setDate(next.getDate() + dir * 7);
+      else if (preset === "year") next.setFullYear(next.getFullYear() + dir);
+      else next.setMonth(next.getMonth() + dir);
+      return next;
+    });
+  };
+
+  const filteredEstimates = (estimates || []).filter((est: any) => {
+    if (!est.date) return false;
+    if (!range.from || !range.to) return true;
+    const d = new Date(est.date);
+    return d >= range.from && d <= range.to;
+  });
 
   const byContractor: Record<string, { total: number; count: number; cementQty: number; sariaQty: number; itemMap: Record<string, { name: string; qty: number; amount: number }> }> = {};
-  (estimates || []).forEach((est: any) => {
-    const name = (est.contractorName || "").trim();
-    if (!name) return;
+  // Maps lowercased name -> the canonical (first-seen) display casing, so
+  // "Ramesh" and "ramesh" typed on different estimates land in the same
+  // bucket instead of fragmenting into two contractors with split points —
+  // matching the case-insensitive nameKey lookup used for phone numbers.
+  const canonicalCaseByLower: Record<string, string> = {};
+  filteredEstimates.forEach((est: any) => {
+    const raw = (est.contractorName || "").trim();
+    if (!raw) return;
+    const lower = raw.toLowerCase();
+    if (!canonicalCaseByLower[lower]) canonicalCaseByLower[lower] = raw;
+    const name = canonicalCaseByLower[lower];
     if (!byContractor[name]) byContractor[name] = { total: 0, count: 0, cementQty: 0, sariaQty: 0, itemMap: {} };
     byContractor[name].total += Number(est.total || 0);
     byContractor[name].count += 1;
@@ -2493,13 +2665,63 @@ function ContractorScorecardView({ estimates, items, currency }: any) {
   const overallCementQty = Object.values(byContractor).reduce((s, c) => s + c.cementQty, 0);
   const overallSariaQty = Object.values(byContractor).reduce((s, c) => s + c.sariaQty, 0);
 
+  const handleShareChoice = (mode: "summary" | "full", channel: "whatsapp" | "print") => {
+    if (!sharePopup) return;
+    if (sharePopup.scope === "single") {
+      const name = sharePopup.name!;
+      const c = byContractor[name];
+      if (channel === "whatsapp") {
+        if (!phoneFor(name)) {
+          showToast?.("No phone saved for this contractor — add one first");
+          setSharePopup(null);
+          return;
+        }
+        window.open(waLink(phoneFor(name), capForWhatsApp(buildContractorMessage(name, c, currency, range.label, mode))), "_blank");
+      } else {
+        printContractorReport([{ name, c }], range.label, mode, currency, `${name} — Contractor Report`);
+      }
+    } else {
+      if (channel === "whatsapp") {
+        window.open(waLink("", capForWhatsApp(buildContractorListMessage(contractors, byContractor, currency, range.label, mode))), "_blank");
+      } else {
+        printContractorReport(contractors.map((name) => ({ name, c: byContractor[name] })), range.label, mode, currency, "Contractor Points Report");
+      }
+    }
+    setSharePopup(null);
+  };
+
   return (
     <div className="space-y-3 px-5 pb-28">
+      {/* Period filter */}
+      <div className="mt-1 rounded-card border border-line bg-white p-3">
+        <div className="flex gap-1.5">
+          {(["week", "month", "year", "custom"] as PeriodPreset[]).map((p) => (
+            <button key={p} onClick={() => setPreset(p)}
+              className={`flex-1 rounded-full py-1.5 text-xs font-semibold capitalize ${preset === p ? "bg-brand-500 text-white" : "bg-paper text-ink/50"}`}>
+              {p}
+            </button>
+          ))}
+        </div>
+        {preset === "custom" ? (
+          <div className="mt-2.5 flex items-center gap-2">
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-line px-2.5 py-2 text-xs" />
+            <span className="text-ink/30">–</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-line px-2.5 py-2 text-xs" />
+          </div>
+        ) : (
+          <div className="mt-2.5 flex items-center justify-between">
+            <button onClick={() => shiftPeriod(-1)} className="rounded-full p-1.5 hover:bg-paper"><ChevronLeft size={16} className="text-ink/50" /></button>
+            <span className="text-sm font-semibold text-ink">{range.label}</span>
+            <button onClick={() => shiftPeriod(1)} className="rounded-full p-1.5 hover:bg-paper"><ChevronRight size={16} className="text-ink/50" /></button>
+          </div>
+        )}
+      </div>
+
       {overallPoints > 0 && (
-        <div className="relative overflow-hidden rounded-card bg-brand-700 p-5 text-white mt-1">
+        <div className="relative overflow-hidden rounded-card bg-brand-700 p-5 text-white">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-brand-500/40" />
           <div className="relative">
-            <p className="text-xs font-semibold text-white/70">Total contractor points</p>
+            <p className="text-xs font-semibold text-white/70">Total contractor points · {range.label}</p>
             <p className="mt-1 font-display text-3xl font-semibold">{fmtNum(overallPoints)}</p>
             <p className="mt-1 text-xs font-semibold text-white/70">1 cement bag = 1 point · 100kg saria = 5 points</p>
             <div className="mt-4 grid grid-cols-2 gap-3">
@@ -2509,19 +2731,24 @@ function ContractorScorecardView({ estimates, items, currency }: any) {
           </div>
         </div>
       )}
+
       {Object.keys(byContractor).length > 0 && (
-        <div className="relative pt-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search contractors..."
-            className="w-full rounded-xl border border-line bg-white py-2.5 pl-9 pr-3 text-sm"
-          />
-        </div>
+        <>
+          <div className="relative pt-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search contractors..."
+              className="w-full rounded-xl border border-line bg-white py-2.5 pl-9 pr-3 text-sm"
+            />
+          </div>
+          <GhostButton className="w-full justify-center" onClick={() => setSharePopup({ scope: "all" })}><Send size={14} /> Share or print this list</GhostButton>
+        </>
       )}
+
       {contractors.length === 0 ? (
-        <Card><p className="text-sm text-ink/40">{q ? "No contractors match your search." : "No estimates have a contractor name set yet. Add one when creating an estimate to see them here."}</p></Card>
+        <Card><p className="text-sm text-ink/40">{q ? "No contractors match your search." : "No estimates with a contractor name fall in this period."}</p></Card>
       ) : contractors.map((name) => {
         const c = byContractor[name];
         const itemRows = Object.values(c.itemMap).sort((a, b) => b.amount - a.amount);
@@ -2545,6 +2772,13 @@ function ContractorScorecardView({ estimates, items, currency }: any) {
             </button>
             {isOpen && (
               <div className="mt-3 border-t border-line pt-3">
+                <button onClick={() => setEditingPhoneFor(name)} className="mb-3 flex w-full items-center justify-between rounded-xl bg-paper px-3 py-2 text-left">
+                  <span className="flex items-center gap-1.5 text-xs text-ink/60">
+                    <Phone size={13} className="text-ink/40" />
+                    {phoneFor(name) || "No phone number saved"}
+                  </span>
+                  <span className="text-xs font-semibold text-brand-600">{phoneFor(name) ? "Edit" : "Add"}</span>
+                </button>
                 {(c.cementQty > 0 || c.sariaQty > 0) && (
                   <div className="mb-3 space-y-1.5 rounded-xl bg-brand-50/60 px-3 py-2.5">
                     {c.cementQty > 0 && (
@@ -2568,11 +2802,32 @@ function ContractorScorecardView({ estimates, items, currency }: any) {
                     <span className="shrink-0 font-semibold text-ink">{fmtMoney(r.amount, currency)}</span>
                   </div>
                 ))}
+                <div className="mt-3 border-t border-line pt-3">
+                  <GhostButton className="w-full justify-center" onClick={() => setSharePopup({ scope: "single", name })}><Send size={14} /> Share or print</GhostButton>
+                </div>
               </div>
             )}
           </Card>
         );
       })}
+
+      {editingPhoneFor && (
+        <FieldModal
+          title={`${editingPhoneFor} — phone number`}
+          fields={[{ key: "phone", label: "Phone number", type: "tel", placeholder: "e.g. 9876543210" }]}
+          initial={{ phone: phoneFor(editingPhoneFor) }}
+          onClose={() => setEditingPhoneFor(null)}
+          onSave={(v: any) => { onSavePhone(editingPhoneFor, v.phone || ""); setEditingPhoneFor(null); }}
+        />
+      )}
+
+      {sharePopup && (
+        <ContractorSharePopup
+          title={sharePopup.scope === "single" ? sharePopup.name : `${contractors.length} contractors`}
+          onFormat={handleShareChoice}
+          onCancel={() => setSharePopup(null)}
+        />
+      )}
     </div>
   );
 }
@@ -3453,7 +3708,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   const [shareInvoice, setShareInvoice] = useState<any>(null);
   const [printSide, setPrintSide] = useState<"left" | "right">(() => (localStorage.getItem("sbt_print_side") === "right" ? "right" : "left"));
   const togglePrintSide = () => setPrintSide((s) => { const next = s === "left" ? "right" : "left"; localStorage.setItem("sbt_print_side", next); return next; });
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; undo?: () => void } | null>(null);
   const [autoReminder, setAutoReminder] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -3473,17 +3728,55 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
   const [payments, setPayments] = useState<any[]>([]);
   const [labourSessions, setLabourSessions] = useState<any[]>([]);
   const [labourWorkers, setLabourWorkers] = useState<string[]>([]);
+  const [contractors, setContractors] = useState<any[]>([]);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+  const pendingDeletes = useRef<Record<string, () => void>>({});
+
+  const showToast = (msg: string, opts?: { undo?: () => void; duration?: number }) => {
+    setToast({ message: msg, undo: opts?.undo });
+    setTimeout(() => setToast((t) => (t && t.message === msg ? null : t)), opts?.duration ?? 3000);
+  };
+
   const closeModal = () => setModal(null);
   const nextNumber = (list: any[], prefix: string) => `${prefix}-${String(list.length + 1).padStart(4, "0")}`;
+
+  /**
+   * Generic optimistic delete with a 5s undo window, used by every "trash can" button in the app.
+   * Removes the item from local state immediately; the actual API call only fires after the window
+   * elapses, unless the user taps Undo (which restores the item to its original position and cancels
+   * the pending API call).
+   */
+  const scheduleDelete = <T extends { id: string }>(
+    label: string,
+    list: T[],
+    setList: React.Dispatch<React.SetStateAction<T[]>>,
+    id: string,
+    commit: () => Promise<void>
+  ) => {
+    const index = list.findIndex((x) => x.id === id);
+    if (index === -1) return;
+    const item = list[index];
+    const key = `${label}-${id}-${Date.now()}`;
+    const restore = () => setList((c) => { const copy = [...c]; copy.splice(Math.min(index, copy.length), 0, item); return copy; });
+
+    setList((c) => c.filter((x) => x.id !== id));
+
+    const timer = setTimeout(async () => {
+      delete pendingDeletes.current[key];
+      try { await commit(); }
+      catch (err: any) { restore(); onApiError(err, `Failed to delete ${label}`); }
+    }, 5000);
+
+    pendingDeletes.current[key] = () => { clearTimeout(timer); restore(); };
+    showToast(`${label} deleted`, { duration: 5000, undo: () => { pendingDeletes.current[key]?.(); delete pendingDeletes.current[key]; } });
+  };
 
   /* ---- initial load from backend ---- */
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [c, it, o, est, ch, ex, pay, st, ls, lw] = await Promise.all([
+        const [c, it, o, est, ch, ex, pay, st, ls, lw, ct] = await Promise.all([
           api.customers.list(),
           api.items.list(),
           api.orders.list(),
@@ -3494,11 +3787,13 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
           api.settings.get(),
           api.labourSessions.list(),
           api.labourSessions.workers(),
+          api.contractors.list(),
         ]);
         if (cancelled) return;
         setCustomers(c); setItems(it); setOrders(o); setEstimates(est);
         setChallans(ch); setExpenses(ex); setPayments(pay);
         setLabourSessions(ls); setLabourWorkers(lw);
+        setContractors(ct);
         setSettings((prev) => ({ ...prev, ...st }));
       } catch (err: any) {
         if (!cancelled) {
@@ -3535,9 +3830,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     } catch (err) { onApiError(err, "Failed to add customer"); }
   };
 
-  const removeCustomer = async (id: string) => {
-    try { await api.customers.remove(id); setCustomers((c) => c.filter((x) => x.id !== id)); }
-    catch (err) { onApiError(err, "Failed to delete customer"); }
+  const removeCustomer = (id: string) => {
+    scheduleDelete("Customer", customers, setCustomers, id, () => api.customers.remove(id));
   };
 
   const saveChallan = async (v: any) => {
@@ -3568,9 +3862,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     } catch (err) { onApiError(err, "Failed to save item"); }
   };
 
-  const removeItem = async (id: string) => {
-    try { await api.items.remove(id); setItems((c) => c.filter((x) => x.id !== id)); }
-    catch (err) { onApiError(err, "Failed to delete item"); }
+  const removeItem = (id: string) => {
+    scheduleDelete("Item", items, setItems, id, () => api.items.remove(id));
   };
 
   const saveExpense = async (v: any) => {
@@ -3582,9 +3875,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     } catch (err) { onApiError(err, "Failed to record expense"); }
   };
 
-  const removeExpense = async (id: string) => {
-    try { await api.expenses.remove(id); setExpenses((c) => c.filter((x) => x.id !== id)); }
-    catch (err) { onApiError(err, "Failed to delete expense"); }
+  const removeExpense = (id: string) => {
+    scheduleDelete("Expense", expenses, setExpenses, id, () => api.expenses.remove(id));
   };
 
   const docSetter = (type: string) => (type === "estimate" ? setEstimates : setChallans);
@@ -3634,9 +3926,9 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     } catch (err) { onApiError(err, "Failed to save document"); }
   };
 
-  const removeDoc = (type: string) => async (id: string) => {
-    try { await api.documents(type as any).remove(id); docSetter(type)((c: any[]) => c.filter((x) => x.id !== id)); }
-    catch (err) { onApiError(err, "Failed to delete"); }
+  const removeDoc = (type: string) => (id: string) => {
+    const list = type === "estimate" ? estimates : challans;
+    scheduleDelete(type === "estimate" ? "Estimate" : "Challan", list, docSetter(type), id, () => api.documents(type as any).remove(id));
   };
 
   const updateDocStatus = (type: string) => async (id: string, s: string) => {
@@ -3677,12 +3969,11 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     } catch (err) { onApiError(err, "Failed to record collection"); }
   };
 
-  const removePayment = async (id: string) => {
-    try {
+  const removePayment = (id: string) => {
+    scheduleDelete("Payment", payments, setPayments, id, async () => {
       const { invoice } = await api.payments.remove(id);
-      setPayments((c) => c.filter((x) => x.id !== id));
       if (invoice) setEstimates((list) => list.map((i) => (i.id === invoice.id ? invoice : i)));
-    } catch (err) { onApiError(err, "Failed to delete payment"); }
+    });
   };
 
   const saveOrder = async (v: any) => {
@@ -3694,9 +3985,8 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
     } catch (err) { onApiError(err, "Failed to place order"); }
   };
 
-  const removeOrder = async (id: string) => {
-    try { await api.orders.remove(id); setOrders((c) => c.filter((x) => x.id !== id)); }
-    catch (err) { onApiError(err, "Failed to delete order"); }
+  const removeOrder = (id: string) => {
+    scheduleDelete("Order", orders, setOrders, id, () => api.orders.remove(id));
   };
 
   const markOrderReceived = async (orderId: string) => {
@@ -3720,9 +4010,20 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       showToast("Session saved");
     } catch (err) { onApiError(err, "Failed to save session"); }
   };
-  const removeLabourSession = async (id: string) => {
-    try { await api.labourSessions.remove(id); setLabourSessions((l) => l.filter((s) => s.id !== id)); }
-    catch (err) { onApiError(err, "Failed to delete session"); }
+  const removeLabourSession = (id: string) => {
+    scheduleDelete("Session", labourSessions, setLabourSessions, id, () => api.labourSessions.remove(id));
+  };
+
+  const saveContractorPhone = async (name: string, phone: string) => {
+    try {
+      const doc = await api.contractors.create({ name, phone });
+      setContractors((c) => {
+        const idx = c.findIndex((x) => x.name.trim().toLowerCase() === name.trim().toLowerCase());
+        if (idx === -1) return [doc, ...c];
+        const copy = [...c]; copy[idx] = doc; return copy;
+      });
+      showToast("Contractor number saved");
+    } catch (err) { onApiError(err, "Failed to save contractor number"); }
   };
 
   const printEstimate = (invoice: any) => {
@@ -3838,7 +4139,7 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       case "expenses":  return <ExpensesView expenses={expenses} currency={settings.currency} openModal={openModal} removeExpense={removeExpense} />;
       case "todo":      return <ToDoTrackingView items={items} settings={settings} openModal={openModal} />;
       case "labour":    return <LabourTrackingView sessions={labourSessions} knownWorkers={labourWorkers} onSave={saveLabourSession} onRemove={removeLabourSession} currency={settings.currency} />;
-      case "contractors": return <ContractorScorecardView estimates={estimates} items={items} currency={settings.currency} />;
+      case "contractors": return <ContractorScorecardView estimates={estimates} items={items} currency={settings.currency} contractors={contractors} onSavePhone={saveContractorPhone} showToast={showToast} />;
       case "reports":      return <ReportsView data={data} currency={settings.currency} settings={settings} />;
       case "sharereport":  return <ShareReportView invoices={estimates} items={items} customers={customers} currency={settings.currency} settings={settings} />;
       case "billing":      return <AdvancedBillingView autoReminder={autoReminder} setAutoReminder={setAutoReminder} overdueCount={overdueCount} settings={settings} />;
@@ -3980,8 +4281,16 @@ function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       )}
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-lg max-w-sm text-center">
-          {toast}
+        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-brand-600 pl-5 pr-2 py-2 text-sm font-semibold text-white shadow-lg max-w-sm">
+          <span className="text-center">{toast.message}</span>
+          {toast.undo && (
+            <button
+              onClick={() => { toast.undo?.(); setToast(null); }}
+              className="shrink-0 rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold hover:bg-white/25"
+            >
+              Undo
+            </button>
+          )}
         </div>
       )}
     </div>
