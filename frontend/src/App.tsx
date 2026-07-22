@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { api } from "./lib/api";
-import { AuthScreen } from "./components/AuthScreen";
-import { InvoiceApp } from "./components/InvoiceApp";
+import { AuthScreen } from "./Components/AuthScreen";
+import { InvoiceApp } from "./Components/InvoiceApp";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean>(!!api.getToken());
