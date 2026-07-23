@@ -9,6 +9,7 @@ const paymentSchema = new mongoose.Schema(
     method: { type: String },
     invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Document" },
     invoiceNumber: { type: String },
+    type: { type: String, enum: ["advance", "partial", "full", "refund"] },
   },
   { timestamps: true }
 );

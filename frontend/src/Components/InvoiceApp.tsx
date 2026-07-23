@@ -277,7 +277,14 @@ export function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
       const { payment, invoice } = await api.payments.create(v);
       setPayments((p) => [payment, ...p]);
       if (invoice) setEstimates((list) => list.map((i) => (i.id === invoice.id ? invoice : i)));
-      showToast(invoice?.status === "Paid" ? "Payment recorded — estimate fully paid" : invoice?.status === "Partially Paid" ? "Partial payment recorded" : "Payment recorded");
+      const toastMessage = v.invoiceId
+        ? invoice?.status === "Paid"
+          ? "Payment recorded — estimate fully paid"
+          : invoice?.status === "Partially Paid"
+            ? "Partial payment recorded"
+            : "Payment recorded"
+        : "Advance payment recorded";
+      showToast(toastMessage);
       closeModal();
     } catch (err) { onApiError(err, "Failed to record payment"); }
   };
@@ -469,7 +476,7 @@ export function InvoiceApp({ onSignOut }: { onSignOut: () => void }) {
           </div>
         </div>
       );
-      case "payments":  return <PaymentsView payments={payments} customers={customers} currency={settings.currency} openModal={openModal} removePayment={removePayment} />;
+      case "payments":  return <PaymentsView payments={payments} customers={customers} currency={settings.currency} openModal={openModal} removePayment={removePayment} estimates={estimates} />;
       case "expenses":  return <ExpensesView expenses={expenses} currency={settings.currency} openModal={openModal} removeExpense={removeExpense} />;
       case "todo":      return <ToDoTrackingView items={items} settings={settings} openModal={openModal} />;
       case "labour":    return <LabourTrackingView sessions={labourSessions} knownWorkers={labourWorkers} onSave={saveLabourSession} onRemove={removeLabourSession} currency={settings.currency} />;

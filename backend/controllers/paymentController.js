@@ -30,6 +30,8 @@ base.create = async (req, res, next) => {
   try {
     const v = req.body;
     let invoiceNumber;
+    const isRefund = Number(v.amount) < 0;
+    const type = isRefund ? "refund" : v.invoiceId ? "partial" : "advance";
 
     if (v.invoiceId) {
       const existing = await Document.findOne({ _id: v.invoiceId, owner: req.userId, type: "estimate" });
@@ -44,16 +46,21 @@ base.create = async (req, res, next) => {
       method: v.method,
       invoiceId: v.invoiceId,
       invoiceNumber,
+      type,
     });
 
     let invoice = null;
     if (v.invoiceId) {
-      const isRefund = Number(v.amount) < 0;
       invoice = await recalcInvoice(req.userId, v.invoiceId, {
         action: isRefund ? "Refund issued" : "Payment received",
         date: payment.date,
         note: `${v.method || "Cash"} · ${Math.abs(Number(v.amount))}`,
       });
+
+      if (!isRefund && invoice?.status === "Paid") {
+        payment.type = "full";
+        await payment.save();
+      }
     }
 
     res.status(201).json({ payment, invoice });
